@@ -1,0 +1,206 @@
+# Copyright 2016-2018 Hortonworks Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+---
+
+# NOTE: You must make a copy of this template configuration file and
+# save it as ~/.config/bman/config.yaml. Replace config settings as
+# appropriate.
+
+# Name of the cluster, this is also used as the prompt for bman shell.
+#
+Cluster: "HDFSDev"
+
+
+# Credentials for logging into the cluster. This user must have sudo access
+# on all cluster nodes. The default user name is the same as the currently
+# logged in user. The credentials are determined as follows:
+#    1. Use the SshKeyFile if provided.
+#    2. Use the password, if provided.
+#    3. Prompt for the password.
+# User: vagrant
+# SshKeyFile: ~/.ssh/id_rsa
+# Password: vagrant
+
+
+# If True, then nodes will be wiped without first prompting. Set with care.
+ForceWipe: False
+
+
+# Path to the Apache Hadoop tarball that we want to deploy.
+# This setting is required.
+#
+HadoopTarball: /my/tarball/dir/hadoop-3.1.0-SNAPSHOT.tar.gz
+
+# Path to Tez Tarball that we want to deploy.
+# This setting is optional. If absent, then Tez will not be installed.
+#
+# TezTarball: /my/tarball/dir/tez-0.9.2-SNAPSHOT.tar.gz
+
+# JAVA_HOME on cluster nodes. Change this if the JAVA install
+# location is different.
+#
+JavaHome: /usr/latest/java
+
+# The following settings are all required to enable Kerberos
+# security.
+#
+# KadminServer: my.kadmin.server.hostname
+# KadminPrincipal: 'admin/admin@REALM'
+# KadminPassword: 'my-kadmin-password'
+# KerberosRealm: 'REALM'
+# JcePolicyFilesLocation: /my/jce/jars/location
+
+# A list of worker nodes. Worker nodes run the DataNode and
+# NodeManager processes.
+#
+Workers:
+- mynode1.example.com
+- mynode2.example.com
+- mynode3.example.com
+
+
+# CoreSiteSettings are config values which will be used to generate
+# core-site.xml. The format is "  key: 'value'". To add a new setting
+# just add another line to this section # in the format below.
+# This setting is required. At the very least, you MUST define
+# fs.defaultFS.
+#
+CoreSiteSettings:
+  fs.defaultFS: 'hdfs://mynamenode.example.com:8020'
+  # The following CoreSiteSettings are for Hadoop Security.
+  # Uncomment them to enable Hadoop security.
+  # hadoop.security.authentication: 'kerberos'
+  # hadoop.security.authorization: 'true'
+  # hadoop.rpc.protection: 'authentication'
+  # hadoop.security.auth_to_local: |-
+  #   RULE:[2:$1@$0](rm@.*EXAMPLE.COM)s/.*/yarn/
+  #   RULE:[2:$1@$0](nm@.*EXAMPLE.COM)s/.*/yarn/
+  #   RULE:[2:$1@$0](nn@.*EXAMPLE.COM)s/.*/hdfs/
+  #   RULE:[2:$1@$0](dn@.*EXAMPLE.COM)s/.*/hdfs/
+  #   RULE:[2:$1@$0](sn@.*EXAMPLE.COM)s/.*/hdfs/
+  #   RULE:[2:$1@$0](jn@.*EXAMPLE.COM)s/.*/hdfs/
+  #   RULE:[2:$1@$0](jhs@.*EXAMPLE.COM)s/.*/mapred/
+  #   DEFAULT
+
+# HdfsSiteSettings are config values which will be used to generate
+# hdfs-site.xml. The format is "  key: 'value'". To add a new setting
+# just add another line to this section # in the format below.
+# This setting is optional. However it is highly recommended that you
+# define at least the following two values.
+#
+HdfsSiteSettings:
+  # dfs.namenode.name.dir: '/data/disk1/dfs/name'
+  # dfs.datanode.data.dir: '/data/disk1/dfs/data,/data/disk2/dfs/data,/data/disk3/dfs/data'
+
+
+# YarnSiteSettings are config values which will be used to generate
+# yarn-site.xml. The format is "  key: 'value'". To add a new setting
+# just add another line to this section # in the format below.
+# This setting is OPTIONAL.
+#
+YarnSiteSettings:
+  yarn.resourcemanager.address: 'host1.example.com:8032'
+  yarn.nodemanager.aux-services: 'mapreduce_shuffle'
+  yarn.nodemanager.vmem-check-enabled: 'false'
+
+
+# MapredSiteSettings are config values which will be used to generate
+# mapred-site.xml. The format is "  key: 'value'". To add a new
+# setting just add another line to this section # in the format below.
+# This setting is OPTIONAL.
+#
+MapredSiteSettings:
+  mapreduce.framework.name: 'yarn'
+  mapreduce.app-submission.cross-platform: 'false'
+
+# TezSiteSettings are config values which will be used to generate
+# tez-site.xml. The format is "  key: 'value'". To add a new
+# setting just add another line to this section # in the format below.
+# This setting is OPTIONAL.
+#
+TezSiteSettings:
+  mapreduce.framework.name: 'yarn'
+  mapreduce.app-submission.cross-platform: 'false'  
+
+
+# MapredSiteSettings are config values which will be used to generate
+# mapred-site.xml. The format is "  key: 'value'". To add a new
+# setting just add another line to this section # in the format below.
+
+# The directory where we will install the hadoop tarball. if this directory does
+# not exist on the remote machine it will be created.
+#
+HomeDir: /opt/hadoop
+
+
+# Ozone-specific Configuration below. -----------------------------------------
+
+# Indicates that we would like ozone enabled in the cluster. This is required if
+# want to run CBlocks too. By defualt this value is false.
+# If this enabled then ozone logging information
+# will be added to the log4j.properties automatically.
+OzoneEnabled : True
+
+# Name of the SCM Node, if this is not specified then the value in the Name node
+# is used to deploy SCM. Hostname or an IP Address.
+ScmServerAddress:
+
+# Ozone MetadataDir directory, if ozone is enabled this become a required value
+# and cannot be left empty.
+OzoneMetadataDir : /data/disk1/scm/meta
+
+# Datanode ID file path, required if not specified the default in the config.py will
+# be used.
+SCMDatanodeID : /data/disk1/scm/meta/node/datanode.id
+
+# Cblock Server Address - if not specified, then Namenode's address will be used.
+# Hostname or IP Address.
+cBlockServerAddress :
+
+# Today CBlock Cache is enabled or disabled on a machine wide basis. This will
+# soon change and become disk specific. But this setting allows us to turn on the
+# cache setting or disable it. Values are True or False.
+CBlockCacheEnabled : True
+
+# Cache path used by the CBlock Cache. The default maps to /home/hdfs/cblock_cache
+CBlockCachePath : /home/hdfs/cblock_cache
+
+# CBlock Tracing logs all I/O access to a trace log. This allows us to debug an
+# data corruption issue or create a workload based on the trace. Values are
+# True or False
+# If this enabled then cblock trace logging information
+# will be added to the log4j.properties automatically.
+CBlockCacheTraceEnabled : False
+
+# Config that enables or disables various features, generally you can leave
+# these to have default values.
+# If the cluster is not local, generally it is couple of minutes to push
+# 200 MB plus hadoop tarball to a single machine in the cluster. However doing this
+# for many machines takes a long time. If you set UseFastCopy to true, then tar
+# ball is pushed to Namenode and subsequently an SCP command is used to copy from
+# Namenode to datanodes.  SCP generally takes under 1 second. The downside is that
+# SCP is noisy and might complain about unknown nodes and will ask for the HDFS
+# users password. if you have a local cluster then you can set UseFastCopy to false.
+# Valid values for this key are True or False. Default is set to False.
+UseFastCopy : True
+
+# OzoneSiteSettings are custom config values which will be read and added
+# to ozone-site.xml. The format is "  key: 'value'". To add a new
+# setting just add another line to this section # in the format below.
+#
+OzoneSiteSettings:
+  dfs.cblock.cache.cache.size.in.kb: '128'
+  dfs.cblock.cache.core.pool.size: '16'
+  dfs.cblock.cache.max.pool.size: '256'
+  dfs.cblock.cache.keep.alive.seconds: '60'

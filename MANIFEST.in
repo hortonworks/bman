@@ -1,0 +1,16 @@
+include_package_data=True
+
+include LICENSE.txt
+include README.md
+include bman.py
+include config.yaml.template
+include requirements.txt
+include setup.py
+
+recursive-include bman/resources *.py *.template *jsvc* container-executor
+
+prune hdfs-dev-cluster *
+prune bman/tests *
+prune logs/
+prune scripts/
+prune

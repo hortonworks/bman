@@ -1,0 +1,12 @@
+rbac:
+   create: true
+alertmanager:
+   enabled: false
+pushgateway:
+   enabled: false
+server:
+   persistentVolume:
+      enabled: false
+   service:
+      type: NodePort
+      nodePort: 31111
