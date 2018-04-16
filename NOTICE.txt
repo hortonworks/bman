@@ -1,0 +1,16 @@
+-------------------------------------------------------------------
+
+bman source and package distributions include configuration file
+templates from Apache Hadoop and a binary release of the YARN
+Linux container-executor.
+
+-------------------------------------------------------------------
+
+bman source and package distributions includes a binary release of
+Apache Commons Daemon (jsvc).
+
+-------------------------------------------------------------------
+
+
+Apache is either a registered trademark or trademark of the Apache
+Software Foundation in the United States and/or other countries.

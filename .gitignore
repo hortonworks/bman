@@ -1,0 +1,26 @@
+*.pyc
+.DS_Store
+.idea/
+__pycache__/
+policy-jars/
+venv/
+
+# Site copy of the configuration.
+#
+config.yaml
+
+# Hadoop Tarballs
+#
+hadoop-*.tar.gz
+hadoop-*.tgz
+
+# Files generated during deployment.
+#
+.conf-generated/
+.ssh-keys/
+logs/
+
+# Packaging artifacts
+#
+bman.egg-info/
+dist/

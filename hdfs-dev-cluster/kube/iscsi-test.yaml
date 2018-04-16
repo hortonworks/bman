@@ -1,0 +1,24 @@
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: iscsipd
+spec:
+  containers:
+  - name: iscsipd-rw
+    image: alpine:latest
+    command: ["cat"]
+    tty: true
+    stdin: true
+    volumeMounts:
+    - mountPath: "/mnt/iscsipd"
+      name: iscsipd-rw
+  volumes:
+  - name: iscsipd-rw
+    iscsi:
+      targetPortal: 172.26.32.227:3260
+      portals: ['172.26.32.227:3260']
+      iqn: iqn.2001-04.com.hortonworks:vol3
+      lun: 0
+      fsType: ext4
+      #readOnly: true

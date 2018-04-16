@@ -1,0 +1,14 @@
+#This is just for testing persistent volume
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: test
+  #  namespace: rook
+spec:
+#  storageClassName: rook-block
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+

@@ -1,0 +1,20 @@
+#
+# Cblock trace logging.
+# The default is to retain 10 traceIO.log files up to 64MB each.
+# we also write this log in JSON layout so that it is easy to parse and make
+# sense of what kind of I/O we are seeing. it is impossible to read the logs
+# since you will see thousands of entries, so this log is desinged to be
+# machine parseable.
+#
+
+log4j.logger.TraceIO=INFO,TraceIO
+log4j.additivity.TraceIO=false
+log4j.appender.TraceIO=org.apache.log4j.RollingFileAppender
+log4j.appender.TraceIO.File=${hadoop.log.dir}/traceIO.log
+log4j.appender.TraceIO.Threshold=debug
+log4j.appender.TraceIO.layout=net.logstash.log4j.JSONEventLayoutV1
+log4j.appender.TraceIO.layout.compact=true
+log4j.appender.TraceIO.layout.eventEOL=true
+log4j.appender.TraceIO.layout.complete=true
+log4j.appender.TraceIO.MaxBackupIndex=10
+log4j.appender.TraceIO.MaxFileSize=64MB
