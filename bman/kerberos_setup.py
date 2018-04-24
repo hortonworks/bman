@@ -204,11 +204,12 @@ def install_container_executor(cluster=None):
     :return:
     """
     local_ce_file = resource_filename('bman.resources.bin', 'container-executor')
-    remote_path = os.path.join(cluster.get_hadoop_install_dir(), 'bin')
+    remote_path = os.path.join(cluster.get_hadoop_install_dir(), 'bin/container-executor')
     if not exists(path=remote_path):
+        get_logger().debug(" >> Copying container executor from {} to {}".format(local_ce_file, remote_path))
         put(local_path=local_ce_file, remote_path=remote_path)
     sudo('chown root.{0} {1} && chmod 6050 {1}'.format(
-        HADOOP_GROUP, os.path.join(remote_path, 'container-executor')))
+        HADOOP_GROUP, remote_path))
 
 
 def copy_jce_policy_files(cluster):
