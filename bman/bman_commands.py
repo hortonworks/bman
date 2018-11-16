@@ -20,9 +20,9 @@ from colorama import Fore
 from fabric.api import env, local, hide
 from prompt_toolkit import prompt
 
-import bman.bman_config as config
+import bman.config.bman_config as config
 import bman.constants as constants
-from bman.deployment_manager import install_cluster
+from bman.service_installers.common import install_cluster
 from bman.logger import get_logger
 from bman.remote_tasks import prepare_cluster, run_hdfs, run_yarn, run_ozone, start_stop_datanodes, \
     start_stop_namenodes, start_stop_journalnodes, shutdown, add_user

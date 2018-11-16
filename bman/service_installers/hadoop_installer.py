@@ -27,7 +27,7 @@ from bman.utils import start_stop_service, run_dfs_command, do_sleep, \
     get_tarball_destination, put_to_all_nodes, extract_tarball
 
 
-def make_hdfs_storage_directories(cluster=None):
+def make_hdfs_storage_directories(cluster):
     """
     Make the NameNode and DataNode directories.
     :param cluster:
@@ -43,7 +43,10 @@ def make_hdfs_storage_directories(cluster=None):
             return False
 
 
-def do_hadoop_install(cluster=None, cluster_id=None):
+def do_hadoop_install(cluster, cluster_id=None):
+    if not cluster.is_hadoop_enabled():
+        return
+
     deploy_hadoop_tarball(cluster=cluster)
     generate_hadoop_configs(cluster=cluster)
     make_hdfs_storage_directories(cluster)
@@ -86,7 +89,8 @@ def task_make_hdfs_dirs(cluster):
     return True
 
 
-def deploy_hadoop_tarball(cluster=None):
+def deploy_hadoop_tarball(cluster):
+    """ Copy the Hadoop Tarball to all nodes and extract it. """
     source_file = cluster.get_config(constants.KEY_HADOOP_TARBALL)
     remote_file = get_tarball_destination(source_file)
     put_to_all_nodes(cluster=cluster, source_file=source_file, remote_file=remote_file)
@@ -97,7 +101,7 @@ def deploy_hadoop_tarball(cluster=None):
                     strip_level=1)
 
 
-def generate_hadoop_configs(cluster=None):
+def generate_hadoop_configs(cluster):
     output_dir = cluster.get_generated_hadoop_conf_tmp_dir()
     if cluster.is_hadoop_enabled():
         generate_site_config(cluster, filename='core-site.xml',
@@ -111,8 +115,8 @@ def generate_hadoop_configs(cluster=None):
                              output_dir=output_dir)
 
     if cluster.is_yarn_enabled():
-        update_mapred_configs(cluster)
         update_yarn_configs(cluster)
+        update_mapred_configs(cluster)
         generate_site_config(cluster, filename='yarn-site.xml',
                              settings_key=constants.KEY_YARN_SITE_SETTINGS,
                              output_dir=cluster.get_generated_hadoop_conf_tmp_dir())
@@ -129,7 +133,7 @@ def generate_hadoop_configs(cluster=None):
 
 
 @task
-def copy_hadoop_config_files(cluster=None, source_dir=None):
+def copy_hadoop_config_files(cluster, source_dir):
     """ Copy the config to the right location."""
     for config_file in glob.glob(os.path.join(source_dir, "*")):
         filename = os.path.basename(config_file)
@@ -238,9 +242,12 @@ def start_stop_all_journalnodes(cluster, action=None):
                        action=action, service_name='journalnode',
                        user=constants.HDFS_USER)
 
-def update_mapred_configs(cluster=None):
+def update_mapred_configs(cluster):
     """
     Add missing mapred-site.xml configuration settings that are required by YARN.
+
+    This reduces administrative burden by adding sensible defaults for some mandatory
+    settings.
     """
     settings_dict = cluster.get_config(constants.KEY_MAPRED_SITE_SETTINGS)
 
@@ -257,11 +264,14 @@ def update_mapred_configs(cluster=None):
         settings_dict['mapreduce.app-submission.cross-platform'] = 'false'
 
 
-def update_yarn_configs(cluster=None):
+def update_yarn_configs(cluster):
     """
     Add missing yarn-site.xml configuration settings that are required by YARN.
     See the Apache docs for yarn-default.xml for a description of these settings:
     https://hadoop.apache.org/docs/current/hadoop-yarn/hadoop-yarn-common/yarn-default.xml
+
+    This reduces administrative burden by adding sensible defaults for some mandatory
+    settings.
     """
     settings_dict = cluster.get_config(constants.KEY_YARN_SITE_SETTINGS)
 
@@ -322,3 +332,5 @@ def update_hdfs_configs(cluster):
         settings_dict['dfs.replication'] = max(3, len(cluster.get_worker_nodes()))
 
 
+if __name__ == '__main__':
+    pass

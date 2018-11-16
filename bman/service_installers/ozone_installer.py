@@ -11,19 +11,21 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import os
 
-from bman.local_tasks import generate_custom_settings
+import os
+import string
+
 from fabric.api import execute
 from fabric.decorators import task
 from fabric.operations import sudo
+from pkg_resources import resource_string
 
 import bman.constants as constants
+from bman.local_tasks import generate_custom_settings
 from bman.logger import get_logger
-from pkg_resources import resource_string, resource_listdir
-import string
 
-def deploy_ozone(cluster, targets):
+
+def deploy_ozone(cluster):
     if cluster.get_config(constants.KEY_OZONE_ENABLED):
         generate_ozone_site(cluster)
 
@@ -74,3 +76,5 @@ def generate_ozone_site(cluster):
         ozone_site.write(ozone_str)
 
 
+if __name__ == '__main__':
+    pass

@@ -28,8 +28,8 @@ from bman.constants import *
 # if is a setting for hdfs_site.xml, you need to add the template to
 # hdfs_site.xml.template and then pass the value to template processing in
 # local_tasks.py#generate_hdfs_site
-from bman.hdfs_master_configs import HdfsMasterConfigs, ConfigurationError
-from bman.kerberos_config_manager import KerberosConfigGenerator
+from bman.config.hdfs_master_configs import HdfsMasterConfigs
+from bman.config.kerberos_config_manager import KerberosConfigGenerator
 from bman.kerberos_setup import KEY_KADMIN_SERVER, KEY_KADMIN_PRINCIPAL, KEY_KADMIN_PASSWORD
 from bman.logger import get_logger
 

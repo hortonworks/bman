@@ -15,18 +15,13 @@
 # This file contains local tasks used command shell and the script.
 
 import os
-import re
-import shutil
 from os.path import expanduser
-from string import Template
 
 from fabric.api import task, local, hide, settings
 from fabric.operations import put, sudo
 from fabric.state import env
-from pkg_resources import resource_string, resource_listdir
 
 import bman.constants as constants
-from bman.bman_config import load_config
 from bman.logger import get_logger
 
 
@@ -78,15 +73,6 @@ def get_config_file_footer():
 </configuration>"""
 
 
-def check_for_generated_dirs(cluster=None):
-    for d in [cluster.get_generated_hadoop_conf_tmp_dir(),
-              cluster.get_generated_tez_conf_tmp_dir(),
-              cluster.get_ssh_keys_tmp_dir()]:
-        if os.path.exists(d):
-            shutil.rmtree(d)
-        os.makedirs(d)
-
-
 def generate_site_config(cluster, filename=None, settings_key=None, output_dir=None):
     """ Create an XML config file."""
     with open(os.path.join(output_dir, filename), "w") as site:
@@ -107,96 +93,6 @@ def generate_custom_settings(custom_values):
   </property>
 """.format(k, custom_values[k])
     return generated_val
-
-
-def hadoop_env_tez_settings(cluster):
-    return """
-
-    # Apache Tez configuration.
-    #
-    export TEZ_CONF_DIR={0}
-    export TEZ_JARS={1}
-    export HADOOP_CLASSPATH=${{HADOOP_CLASSPATH}}:${{TEZ_CONF_DIR}}:${{TEZ_JARS}}/*:${{TEZ_JARS}}/lib/*        
-    """.format(cluster.get_tez_conf_dir(), cluster.get_tez_install_dir())
-
-
-def generate_hadoop_env(cluster):
-    """ Generate hadoop-env.sh."""
-    get_logger().debug("Generating hadoop-env.sh from template")
-    template_str = resource_string('bman.resources.conf', 'hadoop-env.sh.template').decode('utf-8')
-    env_str = Template(template_str)
-
-    log_dirs = {}
-    # Set the log directories for Hadoop service users.
-    for user in cluster.get_service_users():
-        log_dirs['{}_log_dir_config'.format(user.name)] = os.path.join(
-            cluster.get_hadoop_install_dir(), "logs", user.name)
-
-    env_str = env_str.safe_substitute(
-        hadoop_home_config=cluster.get_hadoop_install_dir(),
-        java_home=cluster.get_config(constants.KEY_JAVA_HOME),
-        hdfs_datanode_secure_user=(constants.HDFS_USER if cluster.is_kerberized() else ''),
-        hdfs_datanode_user=('root' if cluster.is_kerberized() else constants.HDFS_USER),
-        hdfs_user=constants.HDFS_USER,
-        yarn_user=constants.YARN_USER,
-        jsvc_home=constants.JSVC_HOME,
-        **log_dirs)
-
-    if cluster.is_tez_enabled():
-        env_str = env_str + hadoop_env_tez_settings(cluster)
-
-    with open(os.path.join(cluster.get_generated_hadoop_conf_tmp_dir(), "hadoop-env.sh"), "w") as hadoop_env:
-        hadoop_env.write(env_str)
-
-
-def generate_logging_properties(cluster):
-    """
-    Genrate right logging template based on options that are enabled.
-
-    That is if ozone is enabled, then ozone logging is added if cBlock trace is
-    enabled then cBlock trace setting is added.
-    :param cluster:
-    :return:
-    """
-    logging_templates = ["log4j.properties.template"]
-
-    if cluster.get_config(constants.KEY_OZONE_ENABLED):
-        logging_templates.append(os.path.join("ozone.logging.template"))
-        if cluster.get_config(constants.KEY_CBLOCK_TRACE):
-            logging_templates.append(os.path.join("cblock.tracing.template"))
-
-    with open(os.path.join(cluster.get_generated_hadoop_conf_tmp_dir(), "log4j.properties"), "w") as logging_prop:
-        for log_template in logging_templates:
-            template_str = resource_string('bman.resources.conf', log_template).decode('utf-8')
-            logging_prop.write(template_str)
-
-
-def copy_all_configs(cluster=None):
-    """ Copy the remaining files as-is, removing the .template suffix """
-    conf_generated_dir = cluster.get_generated_hadoop_conf_tmp_dir()
-    get_logger().debug("Listing conf resources")
-    for f in resource_listdir('bman.resources.conf', ''):
-        if f.endswith('.template'):
-            get_logger().debug("Got resource {}".format(f))
-            resource_contents = resource_string('bman.resources.conf', f).decode('utf-8')
-            filename = re.sub(".template$", "", f)
-            with open(os.path.join(conf_generated_dir, filename), "w") as output_file:
-                output_file.write(resource_contents)
-
-
-def generate_workers_file(cluster):
-    """Generates the workers file based on the machines in datanodes list."""
-    workers = cluster.get_config(constants.KEY_WORKERS)
-    conf_generated_dir = cluster.get_generated_hadoop_conf_tmp_dir()
-    with open(os.path.join(conf_generated_dir, 'workers'), 'w') as workers_file:
-        for host_name in workers:
-            workers_file.write(host_name)
-            workers_file.write('\n')
-
-    # Also make a copy named 'slaves' for Hadoop versions 2.x.
-    # TODO: Deprecate this eventually.
-    shutil.copy2(os.path.join(conf_generated_dir, 'workers'),
-                 os.path.join(conf_generated_dir, 'slaves'))
 
 
 def get_keyname_for_user(user=None):

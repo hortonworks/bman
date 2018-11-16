@@ -13,6 +13,7 @@
 # limitations under the License.
 import glob
 import os
+import shutil
 
 from fabric.api import execute, sudo, put
 
@@ -22,35 +23,45 @@ from bman.logger import get_logger
 from bman.utils import get_tarball_destination, run_dfs_command, put_to_all_nodes, extract_tarball
 
 
-def do_tez_install(cluster=None):
+def do_tez_install(cluster):
     if cluster.is_tez_enabled():
         deploy_tez_tarball(cluster=cluster)
         generate_tez_config_files(cluster=cluster)
         deploy_tez(cluster)
 
 
-def deploy_tez_tarball(cluster=None):
-    if cluster.is_tez_enabled():
-        source_file = cluster.get_config(constants.KEY_TEZ_TARBALL)
-        remote_file = get_tarball_destination(source_file)
-        put_to_all_nodes(cluster=cluster, source_file=source_file, remote_file=remote_file)
-        extract_tarball(targets=cluster.get_all_hosts(),
-                        remote_file=remote_file,
-                        target_folder=cluster.get_tez_install_dir(),
-                        strip_level=0)
+def deploy_tez_tarball(cluster):
+    source_file = cluster.get_config(constants.KEY_TEZ_TARBALL)
+    remote_file = get_tarball_destination(source_file)
+    put_to_all_nodes(cluster=cluster, source_file=source_file, remote_file=remote_file)
+    extract_tarball(targets=cluster.get_all_hosts(),
+                    remote_file=remote_file,
+                    target_folder=cluster.get_tez_install_dir(),
+                    strip_level=0)
 
-def generate_tez_config_files(cluster=None):
-    if cluster.is_tez_enabled():
-        update_tez_configs(cluster)
-        generate_site_config(cluster, filename='tez-site.xml',
-                             settings_key=constants.KEY_TEZ_SITE_SETTINGS,
-                             output_dir=cluster.get_generated_tez_conf_tmp_dir())
+def generate_tez_config_files(cluster):
+    create_temp_conf_dirs(cluster)
+    update_tez_configs(cluster)
+    generate_site_config(cluster, filename='tez-site.xml',
+                         settings_key=constants.KEY_TEZ_SITE_SETTINGS,
+                         output_dir=cluster.get_generated_tez_conf_tmp_dir())
 
 
     targets = cluster.get_all_hosts()
-    if cluster.is_tez_enabled() and not execute(copy_tez_config_files, hosts=targets, cluster=cluster):
+    if not execute(copy_tez_config_files, hosts=targets, cluster=cluster):
         get_logger().error('copying config files failed.')
         return False
+
+
+def create_temp_conf_dirs(cluster):
+    """
+    Create a local directory to store the generated Tez config files.
+    :return: 
+    """
+    d = cluster.get_generated_tez_conf_tmp_dir()
+    if os.path.exists(d):
+        shutil.rmtree(d)
+    os.makedirs(d)
 
 
 def copy_tez_config_files(cluster):
@@ -78,9 +89,26 @@ def deploy_tez(cluster):
     """
     Run steps to deploy Apache Tez on the cluster.
     """
-    result = execute(run_dfs_command, cluster=cluster,
-                     cmd='hadoop fs -mkdir -p /apps/{0} && hadoop fs -chmod 755 /apps && '
-                         'hadoop fs -put {1} /apps/{0} && '
-                         'hadoop fs -chown -R tez /apps/{0} && hadoop fs -chgrp -R hadoop /apps/{0}'.format(
-                            cluster.get_tez_distro_name(),
-                            get_tarball_destination(cluster.get_config(constants.KEY_TEZ_TARBALL))))
+    execute(run_dfs_command, cluster=cluster,
+            cmd='hadoop fs -mkdir -p /apps/{0} && hadoop fs -chmod 755 /apps && '
+            'hadoop fs -put {1} /apps/{0} && '
+            'hadoop fs -chown -R tez /apps/{0} && hadoop fs -chgrp -R hadoop /apps/{0}'.format(
+                cluster.get_tez_distro_name(),
+                get_tarball_destination(cluster.get_config(constants.KEY_TEZ_TARBALL))))
+
+
+def get_hadoop_env_tez_settings(cluster):
+    """ Generate hadoop-env.sh settings to add Tez jars to the classpath. """
+    return """
+
+    # Apache Tez configuration.
+    #
+    export TEZ_CONF_DIR={0}
+    export TEZ_JARS={1}
+    export HADOOP_CLASSPATH=${{HADOOP_CLASSPATH}}:${{TEZ_CONF_DIR}}:${{TEZ_JARS}}/*:${{TEZ_JARS}}/lib/*        
+    """.format(cluster.get_tez_conf_dir(), cluster.get_tez_install_dir())
+
+
+if __name__ == '__main__':
+    pass
+

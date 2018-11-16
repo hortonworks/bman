@@ -25,7 +25,7 @@ from pkg_resources import resource_filename
 
 from bman.constants import *
 from bman.exceptions import *
-from bman.kerberos_config_manager import make_principal_configuration
+from bman.config.kerberos_config_manager import make_principal_configuration
 from bman.logger import get_logger
 from bman.utils import copy, run_cmd, fast_copy
 

@@ -22,7 +22,7 @@ from fabric.api import task, settings, sudo, hide, env, execute
 from fabric.decorators import parallel
 
 import bman.constants as constants
-import bman.bman_config as config
+import bman.config.bman_config as config
 from bman.kerberos_setup import make_headless_principal
 from bman.logger import get_logger
 from bman.utils import start_stop_service, prompt_for_yes_no, run_dfs_command

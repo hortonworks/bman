@@ -27,7 +27,7 @@ from pygments.token import Token
 import bman.bman_commands as bman_commands
 from bman import constants
 from bman.logger import get_logger
-from bman.bman_config import load_config
+from bman.config.bman_config import load_config
 
 commands_list = ['config', 'help', 'quit', 'namenodes', 'datanodes',
                  'journalnodes', 'cluster', 'tarball', 'prepare',

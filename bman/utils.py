@@ -12,14 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import glob
 import os
 
 import time
 
 from fabric.context_managers import hide
 
-from bman.kerberos_config_manager import KEYTABS_DEFAULT_DIR
+from bman.config.kerberos_config_manager import KEYTABS_DEFAULT_DIR
 from fabric.tasks import execute
 
 from bman import constants
