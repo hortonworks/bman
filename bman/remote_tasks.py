@@ -45,9 +45,9 @@ def prepare_cluster(cluster=None, force=False):
             get_logger().error('cleaning tmp failed.')
             return False
 
-        if not execute(clean_root_dir, hosts=targets, path=cluster.get_config(constants.KEY_HOMEDIR)):
+        if not execute(clean_root_dir, hosts=targets, path=cluster.get_config(constants.KEY_INSTALL_DIR)):
             get_logger().error("Unable to remove files from the root dir : %s" %
-                               cluster.get_config(constants.KEY_HOMEDIR))
+                               cluster.get_config(constants.KEY_INSTALL_DIR))
             return False
 
         if not execute(make_shell_profile, hosts=targets, install_dir=cluster.get_hadoop_install_dir()):

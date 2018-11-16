@@ -43,13 +43,22 @@ class Cluster(object):
     approach.
     """
 
-    def __init__(self, values, config_file=None):
+    def __init__(self, values, config_file):
+        """
+
+        :param values: A Python object corresponding to the YAML config file.
+        :param config_file: Path to the configuration file.
+        """
+        if not config_file:
+            raise ValueError("config file path must be specified.")
+
         self.config = {}
         self.all_site_settings = {}
         self.hdfs_master_configs = None
         self.worker_nodes, self.rm_hosts, = [], []
         self.config_file = config_file
         self.cluster_constructor(values)
+
         # TODO: Use randomly generated passwords instead. Currently the password
         # is the same as the username.
         self.all_users = {
@@ -116,24 +125,19 @@ class Cluster(object):
         :param values:
         :return:
         """
-        # Required config values if this is missing we will raise an exception
-        self.read_required_config_value(values, KEY_NAME)
+        # Mandatory settings for all clusters.
+        self.read_required_config_value(values, KEY_CLUSTER_NAME)
         self.read_config_value_with_altkey(values, KEY_WORKERS, KEY_DATANODES)
-        self.read_config_value_with_altkey(values, KEY_HADOOP_TARBALL, KEY_TARBALL)
-        self.read_required_config_value(values, KEY_HOMEDIR)
-        self.read_required_config_value(values, KEY_CORE_SITE_SETTINGS)
-        self.read_required_config_value(values, KEY_HDFS_SITE_SETTINGS)
-        self.read_config_value_with_default(values, KEY_OZONE_SITE_SETTINGS, {})
+        self.read_config_value_with_default(values, KEY_JAVA_HOME, DEFAULT_JAVA_HOME)
 
-        # Yarn and mapred settings are optional. If absent, then YARN services will
-        # not be started.
-        self.read_config_value_with_default(values, KEY_YARN_SITE_SETTINGS, {})
-        self.read_config_value_with_default(values, KEY_MAPRED_SITE_SETTINGS, {})
 
-        # Tez settings are also optional.  If absent, then Tez will not be installed.
-        self.read_config_value_with_default(values, KEY_TEZ_TARBALL, None)
-        self.read_config_value_with_default(values, KEY_TEZ_SITE_SETTINGS, {})
+        # Read settings for each supported service.
+        self.read_hadoop_and_hdfs_settings(values)
+        self.read_ozone_settings(values)
+        self.read_yarn_settings(values)
+        self.read_tez_settings(values)
 
+        # Combine all the site settings into a single map.
         self.all_site_settings = {**self.config[KEY_CORE_SITE_SETTINGS],
                                   **self.config[KEY_HDFS_SITE_SETTINGS],
                                   **self.config[KEY_OZONE_SITE_SETTINGS],
@@ -141,28 +145,13 @@ class Cluster(object):
                                   **self.config[KEY_YARN_SITE_SETTINGS],
                                   **self.config[KEY_TEZ_SITE_SETTINGS]}
 
-        self.read_config_value_with_default(values, KEY_JAVA_HOME, DEFAULT_JAVA_HOME)
-        self.hdfs_master_configs = HdfsMasterConfigs(self.all_site_settings)
-        self.init_host_lists()
-
-        self.read_config_value_with_default(values, KEY_OZONE_ENABLED, 'False')
-        # If ozone is enabled then we must know where to place ozone metadata.
-        if self.get_config(KEY_OZONE_ENABLED):
-            self.read_required_config_value(values, KEY_OZONE_METADIR)
-
-        # If no value is specified for these two services then use the address of
-        # any one NameNode.
-        one_nn = sorted(list(self.get_hdfs_master_config().get_nn_hosts()))[0]
-        self.read_config_value_with_default(values, KEY_SCMADDRESS, one_nn)
-        self.read_config_value_with_default(values, KEY_CBLOCK_ADDRESS, one_nn)
+        if self.is_hdfs_enabled():
+            self.hdfs_master_configs = HdfsMasterConfigs(self.all_site_settings)
+            self.init_host_lists()
 
         # Key values with defaults. If user does not specify a value,
         # we will use the defaults.
         self.read_config_value_with_default(values, KEY_FORCE_WIPE, 'False')
-        self.read_config_value_with_default(values, KEY_SCM_DATANODE_ID, "/data/disk1/scm/meta/node/datanode.id")
-        self.read_config_value_with_default(values, KEY_CBLOCK_CACHE, 'True')
-        self.read_config_value_with_default(values, KEY_CBLOCK_TRACE, 'False')
-        self.read_config_value_with_default(values, KEY_CBLOCK_CACHE_PATH, '/home/hdfs/cblock_cache')
         self.read_config_value_with_default(values, KEY_USER, getpass.getuser())
         self.read_config_value_with_default(values, KEY_PASSWORD)
         self.read_config_value_with_default(values, KEY_SSH_KEYFILE)
@@ -173,6 +162,52 @@ class Cluster(object):
         self.read_config_value_with_default(values, KEY_KADMIN_PASSWORD)
         self.read_config_value_with_default(values, KEY_JCE_POLICY_FILES_LOCATION)
         self.read_config_value_with_default(values, KEY_REALM)
+
+    def read_hadoop_and_hdfs_settings(self, values):
+        """
+        Extract Hadoop and HDFS settings from the configuration, if present.
+        :param values:
+        :return: nothing
+        """
+        self.read_config_value_with_default(values, KEY_HADOOP_TARBALL, None)
+        self.read_config_value_with_altkey(values, KEY_INSTALL_DIR, KEY_HOMEDIR)
+        self.read_config_value_with_default(values, KEY_CORE_SITE_SETTINGS)
+        self.read_config_value_with_default(values, KEY_HDFS_SITE_SETTINGS)
+
+    def read_ozone_settings(self, values):
+        """
+        Extract Ozone settings from the configuration, if present.
+        :param values:
+        :return: nothing
+        """
+        self.read_config_value_with_default(values, KEY_OZONE_SITE_SETTINGS, {})
+        self.read_config_value_with_default(values, KEY_OZONE_TARBALL, None)
+
+        # Fail if we see obsolete Ozone settings. Ozone configuration is now
+        # done exclusively via KEY_OZONE_SITE_SETTINGS.
+        for v in [KEY_OZONE_ENABLED, KEY_OZONE_METADIR, KEY_SCM_DATANODE_ID]:
+            self.read_config_value_with_default(values, v, 'False')
+            if self.get_config(v):
+                raise ValueError(". Instead add all Ozone settings via {}",
+                                 v, KEY_OZONE_SITE_SETTINGS)
+
+    def read_yarn_settings(self, values):
+        """
+        Extract YARN and MapReduce settings from the configuration, if present.
+        :param values:
+        :return: nothing
+        """
+        self.read_config_value_with_default(values, KEY_YARN_SITE_SETTINGS, {})
+        self.read_config_value_with_default(values, KEY_MAPRED_SITE_SETTINGS, {})
+
+    def read_tez_settings(self, values):
+        """
+        Extract Tez settings from the configuration, if present.
+        :param values:
+        :return:
+        """
+        self.read_config_value_with_default(values, KEY_TEZ_TARBALL, None)
+        self.read_config_value_with_default(values, KEY_TEZ_SITE_SETTINGS, {})
 
     def init_host_lists(self):
         """
@@ -203,10 +238,10 @@ class Cluster(object):
             self.get_site_setting('hadoop.security.authentication').lower() == 'kerberos'
 
     def get_hadoop_install_dir(self):
-        return '{}/{}'.format(self.get_config(KEY_HOMEDIR), self.get_hadoop_distro_name())
+        return '{}/{}'.format(self.get_config(KEY_INSTALL_DIR), self.get_hadoop_distro_name())
 
     def get_tez_install_dir(self):
-        return '{}/{}'.format(self.get_config(KEY_HOMEDIR), self.get_tez_distro_name())
+        return '{}/{}'.format(self.get_config(KEY_INSTALL_DIR), self.get_tez_distro_name())
 
     def get_hadoop_distro_name(self):
         tarball_name = os.path.basename(self.get_config(KEY_HADOOP_TARBALL))
@@ -218,6 +253,16 @@ class Cluster(object):
 
     def get_datanode_dirs(self):
         return self.get_site_setting('dfs.datanode.data.dir').split(',')
+
+    def is_hadoop_enabled(self):
+        return self.get_config(KEY_HADOOP_TARBALL) and \
+               self.get_config(KEY_CORE_SITE_SETTINGS)
+
+    def is_hdfs_enabled(self):
+        return self.is_hadoop_enabled()
+
+    def is_ozone_enabled(self):
+        return self.get_config(KEY_OZONE_SITE_SETTINGS)
 
     def is_yarn_enabled(self):
         return self.get_config(KEY_YARN_SITE_SETTINGS)
@@ -250,7 +295,7 @@ class Cluster(object):
         """
         return os.path.join(
             os.path.expanduser('~'), '.config', 'bman',
-            '.ssh-keys-{}'.format(self.get_config(KEY_NAME)))
+            '.ssh-keys-{}'.format(self.get_config(KEY_CLUSTER_NAME)))
 
     def get_generated_hadoop_conf_tmp_dir(self):
         """
@@ -260,7 +305,7 @@ class Cluster(object):
         """
         return os.path.join(
             os.path.expanduser('~'), '.config', 'bman',
-            '.conf-generated-{}-hadoop'.format(self.get_config(KEY_NAME)))
+            '.conf-generated-{}-hadoop'.format(self.get_config(KEY_CLUSTER_NAME)))
 
     def get_generated_tez_conf_tmp_dir(self):
         """
@@ -270,7 +315,7 @@ class Cluster(object):
         """
         return os.path.join(
             os.path.expanduser('~'), '.config', 'bman',
-            '.conf-generated-{}-tez'.format(self.get_config(KEY_NAME)))
+            '.conf-generated-{}-tez'.format(self.get_config(KEY_CLUSTER_NAME)))
 
     def get_hadoop_conf_dir(self):
         return os.path.join(self.get_hadoop_install_dir(), 'etc', 'hadoop')

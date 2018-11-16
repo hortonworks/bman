@@ -73,6 +73,11 @@ def make_headless_principals(cluster):
 
 def do_kerberos_install(cluster=None):
 
+    if not cluster.is_kerberized():
+        get_logger().info("Kerberos is not enabled. Skipping Kerberos install.")
+        return
+
+    get_logger().info("Enabling Kerberos support.")
     get_logger().info("Installing jsvc and Linux container executor on all cluster hosts")
     copy_jce_policy_files(cluster)
     execute(install_jsvc, hosts=cluster.get_all_hosts())

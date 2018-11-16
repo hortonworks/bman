@@ -16,19 +16,21 @@ import os
 import uuid
 
 import fabric
-from fabric.api import hide, execute, show
+from fabric.api import hide, execute
 from fabric.contrib.files import exists as remote_exists
 from fabric.decorators import task
-from fabric.operations import sudo, put
+from fabric.operations import sudo
 from fabric.state import env
 
 import bman.constants as constants
+from bman.service_installers.hadoop_installer import do_hadoop_install
+from bman.service_installers.tez_installer import do_tez_install
 from bman.kerberos_setup import do_kerberos_install
-from bman.local_tasks import generate_configs, sshkey_gen, sshkey_install, copy_private_key
+from bman.local_tasks import sshkey_gen, sshkey_install, copy_private_key, generate_workers_file, \
+    generate_hadoop_env, generate_logging_properties
 from bman.logger import get_logger
-from bman.remote_tasks import do_active_transitions, stop_dfs, stop_yarn, shutdown, start_yarn, run_yarn
-from bman.utils import get_tarball_destination, start_stop_service, do_untar, \
-    run_dfs_command, do_sleep, put_to_all_nodes, copy_hadoop_config_files, copy_tez_config_files
+from bman.remote_tasks import shutdown, run_yarn
+from bman.utils import copy_tez_config_files
 
 """
 This module contains support methods for performing cluster deployment
@@ -65,57 +67,11 @@ def install_cluster(cluster_id=uuid.uuid4(), cluster=None, stop_services=True):
         setup_passwordless_ssh(cluster, cluster.get_all_hosts())
 
     make_install_dir(cluster=cluster)
-    deploy_hadoop_tarball(cluster=cluster)
-    deploy_tez_tarball(cluster=cluster)
-
-    targets = cluster.get_all_hosts()
-    if not execute(make_hadoop_log_dirs, hosts=targets, cluster=cluster):
-        get_logger().error('Failed to create log directories')
-        return False
-
-    # Make the NameNode and DataNode directories.
-    get_logger().info("Creating HDFS metadata and data directories")
-    with hide('status', 'warnings', 'running', 'stdout', 'stderr',
-              'user', 'commands'):
-        if not execute(make_hdfs_dirs, hosts=targets, cluster=cluster):
-            get_logger().error("Failed to make HDFS directories")
-            return False
-
-    generate_configs(cluster)
-    get_logger().info('copying config files to remote machines.')
-    if not execute(copy_hadoop_config_files, hosts=targets, cluster=cluster):
-        get_logger().error('copying config files failed.')
-        return False
-
-    if cluster.is_tez_enabled() and not execute(copy_tez_config_files, hosts=targets, cluster=cluster):
-        get_logger().error('copying config files failed.')
-        return False
-
-    if not execute(copy_jscsi_helper, hosts=targets, cluster=cluster):
-        get_logger().error('copying jscsi helper failed.')
-        return False
-
-    if not execute(create_ozone_metadata_paths, hosts=targets, cluster=cluster):
-        get_logger().error('Create directories failed.')
-        return False
-
-    if cluster.is_kerberized():
-        get_logger().info("Enabling Kerberos support.")
-        do_kerberos_install(cluster)
-    else:
-        get_logger().info("Cluster is not kerberized.")
-
-    format_hdfs_nameservices(cluster, cluster_id)
-
-    if not execute(start_stop_service, hosts=cluster.get_worker_nodes(), cluster=cluster,
-                   action='start', service_name='datanode'):
-        get_logger().error("Failed to start one or more DataNodes.")
-        return False
-
-    if cluster.is_tez_enabled():
-        deploy_tez(cluster)
-
-    get_logger().info("Done deploying Hadoop to {} nodes.".format(len(targets)))
+    make_hadoop_log_dirs(cluster=cluster)
+    do_kerberos_install(cluster)
+    deploy_common_config_files(cluster)
+    do_hadoop_install(cluster=cluster, cluster_id=cluster_id)
+    do_tez_install(cluster)
 
     if stop_services:
         shutdown(cluster)
@@ -125,13 +81,16 @@ def install_cluster(cluster_id=uuid.uuid4(), cluster=None, stop_services=True):
     return True
 
 
-def start_stop_all_journalnodes(cluster, action=None):
-    hdfs_master_config = cluster.get_hdfs_master_config()
-    targets = hdfs_master_config.get_jn_hosts()
-    if targets:
-        return execute(start_stop_service, hosts=targets, cluster=cluster,
-                       action=action, service_name='journalnode',
-                       user=constants.HDFS_USER)
+def make_hadoop_log_dirs(cluster=None):
+    """
+    Make log output directories for all Hadoop services.
+    :param cluster:
+    :return:
+    """
+    targets = cluster.get_all_hosts()
+    if not execute(task_make_hadoop_log_dirs, hosts=targets, cluster=cluster):
+        get_logger().error('Failed to create log directories')
+        return False
 
 
 @task
@@ -142,7 +101,7 @@ def make_base_install_dir(cluster):
     directory.
     """
     install_dir = cluster.get_hadoop_install_dir()
-    backup_dir = '{}/{}.backup'.format(cluster.get_config(constants.KEY_HOMEDIR),
+    backup_dir = '{}/{}.backup'.format(cluster.get_config(constants.KEY_INSTALL_DIR),
                                        cluster.get_hadoop_distro_name())
 
     get_logger().debug("Making install dir {} on host {}".format(install_dir, env.host))
@@ -152,158 +111,6 @@ def make_base_install_dir(cluster):
     sudo('mkdir -p {}'.format(install_dir))
     sudo('chmod 0755 {}'.format(install_dir))
     return True
-
-
-def deploy_hadoop_tarball(cluster=None):
-    source_file = cluster.get_config(constants.KEY_HADOOP_TARBALL)
-    remote_file = get_tarball_destination(source_file)
-    put_to_all_nodes(cluster=cluster, source_file=source_file, remote_file=remote_file)
-    # The Hadoop tarball has an extra top-level directory, strip it out.
-    extract_tarball(cluster=cluster, targets=cluster.get_all_hosts(),
-                    remote_file=remote_file,
-                    target_folder=cluster.get_hadoop_install_dir(),
-                    strip_level=1)
-
-
-def deploy_tez_tarball(cluster=None):
-    if cluster.is_tez_enabled():
-        source_file = cluster.get_config(constants.KEY_TEZ_TARBALL)
-        remote_file = get_tarball_destination(source_file)
-        put_to_all_nodes(cluster=cluster, source_file=source_file, remote_file=remote_file)
-        extract_tarball(cluster=cluster, targets=cluster.get_all_hosts(),
-                        remote_file=remote_file,
-                        target_folder=cluster.get_tez_install_dir(),
-                        strip_level=0)
-
-
-@task
-def make_hdfs_dirs(cluster):
-    """ Creates NameNode and DataNode directories."""
-    hdfs_master_config = cluster.get_hdfs_master_config()
-    for d in hdfs_master_config.get_nn_dirs():
-        sudo('install -d -m 0755 {}'.format(d))
-        sudo('chown -R hdfs:hadoop {}'.format(d))
-    for d in hdfs_master_config.get_snn_dirs():
-        sudo('install -d -m 0755 {}'.format(d))
-        sudo('chown -R hdfs:hadoop {}'.format(d))
-    for d in hdfs_master_config.get_jn_dirs():
-        sudo('install -d -m 0755 {}'.format(d))
-        sudo('chown -R hdfs:hadoop {}'.format(d))
-    for d in cluster.get_datanode_dirs():
-        sudo('install -d -m 0700 {}'.format(d))
-        sudo('chown -R hdfs:hadoop {}'.format(d))
-    if cluster.get_config(constants.KEY_OZONE_ENABLED):
-        sudo('install -d -m 0755 {}'.format(cluster.get_config(constants.KEY_OZONE_METADIR)))
-        sudo('chown -R hdfs:hadoop {}'.format(cluster.get_config(constants.KEY_OZONE_METADIR)))
-    # Ensure that the hdfs user has permissions to reach its storage
-    # directories.
-    for d in cluster.get_hdfs_master_config().get_nn_dirs() + \
-            cluster.get_datanode_dirs() + \
-            cluster.get_hdfs_master_config().get_snn_dirs():
-        while os.path.dirname(d) != d:
-            d = os.path.dirname(d)
-            sudo('chmod 755 {}'.format(d))
-    return True
-
-
-def copy_jscsi_helper(cluster):
-    """ Copy the jscsi helper script to datanodes if ozone is enabled."""
-    if cluster.get_config(constants.KEY_OZONE_ENABLED):
-        install_dir = cluster.get_hadoop_install_dir()
-        put('scripts/helper.sh', '%s/bin/helper.sh' % install_dir, use_sudo=True)
-        sudo('chmod 755 ' + '%s/bin/helper.sh' % install_dir)
-    return True
-
-
-@task
-def create_ozone_metadata_paths(cluster):
-    """"Creates Ozone metadata paths. """
-    if cluster.get_config(constants.KEY_OZONE_ENABLED):
-        sudo('mkdir -p %s' % cluster.get_config(constants.KEY_OZONE_METADIR),
-             user=constants.HDFS_USER)
-        sudo('mkdir -p %s' % os.path.dirname(cluster.get_config(constants.KEY_SCM_DATANODE_ID)),
-             user=constants.HDFS_USER)
-        sudo('mkdir -p %s' % cluster.get_config(constants.KEY_CBLOCK_CACHE_PATH),
-             user=constants.HDFS_USER)
-        sudo('mkdir -p %s' % cluster.get_config(constants.KEY_OZONE_METADIR),
-             user=constants.HDFS_USER)
-    return True
-
-
-def format_namenode(cluster, cluster_id):
-    """ formats a namenode using the given cluster_id.
-    """
-    # This command will prompt the user, so we are skipping the prompt.
-    get_logger().info('Formatting NameNode {}'.format(env.host_string))
-    with hide("stdout"):
-        return sudo('{}/bin/hdfs namenode -format -clusterid {}'.format(
-            cluster.get_hadoop_install_dir(), cluster_id), user=constants.HDFS_USER).succeeded
-
-
-def format_hdfs_nameservices(cluster, cluster_id):
-    """
-    Run steps to format an HDFS HA cluster.
-        1. Start JournalNodes.
-        2. Format active NameNodes.
-        3. Start active NameNodes.
-        4. Boostrap standby NameNodes.
-        5. Shutdown active NameNodes.
-        6. Shutdown JournalNodes.
-    :param cluster_id:
-    :param cluster:
-    :return:
-    """
-    start_stop_all_journalnodes(cluster, action='start')
-    # Format and start the active NNs.
-    actives = cluster.get_hdfs_master_config().choose_active_nns()
-    if not execute(format_namenode, hosts=actives, cluster=cluster, cluster_id=cluster_id):
-        get_logger().error("Failed to format one or more active NameNodes.")
-        return False
-    if not execute(start_stop_service, hosts=actives, cluster=cluster,
-                   action='start', service_name='namenode', user=constants.HDFS_USER):
-        get_logger().error("Failed to start one or more active NameNodes.")
-        return False
-
-    do_sleep(10)
-
-    # Bootstrap the standby NNs.
-    standbys = cluster.get_hdfs_master_config().choose_standby_nns()
-    if standbys:
-        if not execute(bootstrap_standby, hosts=standbys, cluster=cluster):
-            get_logger().error("Failed to bootstrap standby NameNodes.")
-            return False
-        execute(start_stop_service, hosts=standbys, cluster=cluster,
-                action='start', service_name='namenode', user=constants.HDFS_USER)
-        do_sleep(10)
-
-    # While the NNs are up, let's create tmp directories necessary for
-    # running YARN jobs. This works without DataNodes as there are no files/blocks in
-    # the system, so NN exits safe mode without restarting the DataNode.
-    do_active_transitions(cluster)
-    make_hdfs_dir(cluster, '/tmp', '1777')
-    make_hdfs_dir(cluster, '/apps', '755')
-    make_hdfs_dir(cluster, '/home', '755')
-    make_home_dirs(cluster)
-
-
-@task
-def bootstrap_standby(cluster):
-    """ Bootstraps a standby NameNode """
-    install_dir = cluster.get_hadoop_install_dir()
-    get_logger().info("Bootstrapping standby NameNode: {}".format(env.host_string))
-    cmd = '{}/bin/hdfs namenode -bootstrapstandby'.format(install_dir)
-    return sudo(cmd, user=constants.HDFS_USER).succeeded
-
-
-def extract_tarball(cluster=None, targets=None, remote_file=None,
-                    target_folder=None, strip_level=None):
-    get_logger().info("Extracting {} on all nodes".format(remote_file))
-    with hide('status', 'warnings', 'running', 'stdout', 'stderr',
-              'user', 'commands'):
-        if not execute(do_untar, hosts=targets, tarball=remote_file,
-                       target_folder=target_folder, strip_level=strip_level):
-            get_logger().error("Failed to untar {}".format(remote_file))
-            return False
 
 
 def setup_passwordless_ssh(cluster, targets):
@@ -320,7 +127,7 @@ def setup_passwordless_ssh(cluster, targets):
 
 
 @task
-def make_hadoop_log_dirs(cluster=None):
+def task_make_hadoop_log_dirs(cluster=None):
     logging_root = os.path.join(cluster.get_hadoop_install_dir(), constants.HADOOP_LOG_DIR_NAME)
     get_logger().debug("Creating log output dir {} on host {}".format(logging_root, env.host))
     sudo('mkdir -p {}'.format(logging_root))
@@ -328,44 +135,26 @@ def make_hadoop_log_dirs(cluster=None):
     sudo('chmod 775 {}'.format(logging_root))
 
 
-def make_hdfs_dir(cluster, path, perm, owner=constants.HDFS_USER):
+def deploy_common_config_files(cluster):
     """
-    Create the specified directory in each HDFS namespace.
-    """
-    get_logger().debug("Creating HDFS directory {}".format(path))
-    if len(cluster.get_hdfs_master_config().get_nameservices()) == 1:
-        # Single namespace, so don't specify it explicitly. It may be a
-        # pseudo-namespace for non-HA, non-federated cluster.
-        cmd = 'hadoop fs -mkdir -p {0} && hadoop fs -chmod {1} {0} && hadoop fs -chown {2} {0}'.format(path, perm, owner)
-        run_dfs_command(cluster=cluster, cmd=cmd)
-        return
+    Deploy config files that are used by multiple services.
+    E.g. workers file, hadoop-env.sh.
 
-    for ns in cluster.get_hdfs_master_config().get_nameservices():
-        cmd = 'hadoop fs -mkdir -p {0}{1} && hadoop fs -chmod {2} {0}{1} && hadoop fs -chown {3} {0}{1}'.format(
-            ns.get_uri(), path, perm, owner)
-        run_dfs_command(cluster=cluster, cmd=cmd)
-
-
-def make_home_dirs(cluster):
-    """
-    Create a homedir for service users in each namespace.
+    These files must be present on every bman deployed cluster.
     :param cluster:
     :return:
     """
-    for user in cluster.get_service_users():
-        make_hdfs_dir(cluster, '/home/{}'.format(user.name), 700, owner=user.name)
 
+    # We create configuration files in the generated directory. Once that
+    # is done, we process specific files that need template processing
+    # and over write them. In other words the copy of all files need to be
+    # first.
+    check_for_generated_dirs(cluster)
+    copy_all_configs(cluster)
 
-def deploy_tez(cluster):
-    """
-    Run steps to deploy Apache Tez on the cluster.
-    """
-    result = execute(run_dfs_command, cluster=cluster,
-                     cmd='hadoop fs -mkdir -p /apps/{0} && hadoop fs -chmod 755 /apps && '
-                         'hadoop fs -put {1} /apps/{0} && '
-                         'hadoop fs -chown -R tez /apps/{0} && hadoop fs -chgrp -R hadoop /apps/{0}'.format(
-                            cluster.get_tez_distro_name(),
-                            get_tarball_destination(cluster.get_config(constants.KEY_TEZ_TARBALL))))
+    generate_workers_file(cluster)
+    generate_hadoop_env(cluster)
+    generate_logging_properties(cluster)
 
 
 if __name__ == '__main__':

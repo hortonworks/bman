@@ -47,22 +47,6 @@ def copy(source_file=None, remote_file=None):
     return True
 
 
-def copy_hadoop_config_files(cluster):
-    """ Copy the config to the right location."""
-    for config_file in glob.glob(os.path.join(cluster.get_generated_hadoop_conf_tmp_dir(), "*")):
-        filename = os.path.basename(config_file)
-        full_file_name = os.path.join(cluster.get_hadoop_conf_dir(), filename)
-        put(config_file, full_file_name, use_sudo=True)
-
-
-def copy_tez_config_files(cluster):
-    for config_file in glob.glob(os.path.join(cluster.get_generated_tez_conf_tmp_dir(), "*")):
-        filename = os.path.basename(config_file)
-        full_file_name = os.path.join(cluster.get_tez_conf_dir(), filename)
-        sudo('mkdir -p {}'.format(cluster.get_tez_conf_dir()))
-        put(config_file, full_file_name, use_sudo=True)
-
-
 @task
 def do_untar(tarball=None, target_folder=None, strip_level=0):
     """ untar the tarball to the right location."""
@@ -212,6 +196,17 @@ def run_dfs_command(cluster=None, cmd=None):
     get_logger().debug("Running command '{}'".format(cmd))
     execute(run_cmd, hosts=cluster.get_hdfs_master_config().get_nn_hosts()[0:1],
             cmd_string=cmd, user=constants.HDFS_USER)
+
+
+def extract_tarball(targets=None, remote_file=None,
+                    target_folder=None, strip_level=None):
+    get_logger().info("Extracting {} on all nodes".format(remote_file))
+    with hide('status', 'warnings', 'running', 'stdout', 'stderr',
+              'user', 'commands'):
+        if not execute(do_untar, hosts=targets, tarball=remote_file,
+                       target_folder=target_folder, strip_level=strip_level):
+            get_logger().error("Failed to untar {}".format(remote_file))
+            return False
 
 
 def is_true(input_string):

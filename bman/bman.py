@@ -94,7 +94,7 @@ def launch_interactive_shell(cluster):
     bman_command_handler = bman_commands.BmanCommandHandler(cluster)
     while True:
         try:
-            text = prompt(message='{}> '.format(cluster.get_config(constants.KEY_NAME)),
+            text = prompt(message='{}> '.format(cluster.get_config(constants.KEY_CLUSTER_NAME)),
                           completer=command_completer,
                           style=DocumentStyle,
                           history=history)

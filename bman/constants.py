@@ -17,14 +17,16 @@
 String and numeric constants used in bman.
 """
 
-KEY_NAME = 'Cluster'
+KEY_CLUSTER_NAME = 'Cluster'
 KEY_USER = 'User'
 KEY_PASSWORD = 'Password'
 KEY_SSH_KEYFILE = 'SshKeyFile'
 KEY_WORKERS = 'Workers'
 KEY_HADOOP_TARBALL = 'HadoopTarball'
+KEY_OZONE_TARBALL = 'OzoneTarball'
+
 KEY_TEZ_TARBALL = 'TezTarball'
-KEY_HOMEDIR = 'HomeDir'
+KEY_INSTALL_DIR = 'InstallDir'
 KEY_SCMADDRESS = 'ScmServerAddress'
 KEY_OZONE_METADIR = 'OzoneMetadataDir'
 KEY_SCM_DATANODE_ID = 'SCMDatanodeID'
@@ -42,6 +44,7 @@ KEY_TEZ_SITE_SETTINGS = 'TezSiteSettings'
 KEY_FORCE_WIPE = 'ForceWipe'
 KEY_JCE_POLICY_FILES_LOCATION = 'JcePolicyFilesLocation'
 KEY_REALM = 'KerberosRealm'
+KEY_HOMEDIR = 'HomeDir'   # Deprecated by KEY_INSTALL_DIR.
 
 KEY_JAVA_HOME = 'JavaHome'
 DEFAULT_JAVA_HOME = '/usr/java/latest'
@@ -61,7 +64,6 @@ DEFAULT_SSH_KEY_NAME = 'id_rsa'  # The default key name that sshd understands
 
 # Deprecated keys. We still parse them for compatibility with older config files.
 KEY_DATANODES = 'Datanodes'     # Deprecated by KEY_WORKERS
-KEY_TARBALL = 'Tarball'         # Deprecated by KEY_HADOOP_TARBALL
 
 if __name__ == '__main__':
     pass
