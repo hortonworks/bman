@@ -333,7 +333,6 @@ def passwd(username=None, password=None):
 
 
 @task
-@parallel
 def add_user_task(new_user=None):
     get_logger().debug("Adding user '{}' on host {}".format(new_user.name, env.host))
     with settings(warn_only=True):

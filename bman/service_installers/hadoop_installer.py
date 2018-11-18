@@ -59,22 +59,21 @@ def __make_hdfs_storage_directories(cluster):
     get_logger().info("Creating HDFS metadata and data directories")
     master_config = cluster.get_hdfs_configs()
     service_dir_map = {
-        'DNs': [cluster.get_worker_nodes(), cluster.get_datanode_dirs()],
-        'NNs': [master_config.get_nn_hosts(), master_config.get_nn_dirs()],
-        'SNNs': [master_config.get_snn_hosts(), master_config.get_snn_dirs()],
-        'JNs': [master_config.get_jn_hosts(), master_config.get_jn_dirs()]
+        tuple(cluster.get_worker_nodes()): cluster.get_datanode_dirs(),
+        tuple(master_config.get_nn_hosts()): master_config.get_nn_dirs(),
+        tuple(master_config.get_snn_hosts()): master_config.get_snn_dirs(),
+        tuple(master_config.get_jn_hosts()): master_config.get_jn_dirs()
     }
 
     with hide('status', 'warnings', 'running', 'stdout', 'stderr',
               'user', 'commands'):
-        for service, nodes_and_dirs in service_dir_map:
-            get_logger().info("Creating {} directories on {} hosts".format(
-                service, len(nodes_and_dirs[0])))
-            if not execute(make_hdfs_storage_dirs,
-                           hosts=nodes_and_dirs[0],
-                           dirs=nodes_and_dirs[1]):
-                get_logger().error("Failed to make {} directories".format(service))
-                return False
+        for nodes, dirs in service_dir_map.items():
+            if nodes and dirs:
+                get_logger().info("Creating {} directories on {} hosts".format(
+                    dirs, len(nodes)))
+                if not execute(make_hdfs_storage_dirs, hosts=list(nodes), dirs=dirs):
+                    get_logger().error("Failed to make directories {}".format(dirs))
+                    return False
 
 
 @task

@@ -65,9 +65,10 @@ class BmanCommandHandler:
         print(Fore.CYAN + "\tinstall" + Fore.RESET + "\t\t - install the cluster and start all services")
         print(Fore.CYAN + "\tstart [dfs|yarn|ozone|namenodes|datanodes]" + Fore.RESET + "\t\t - start all or some services")
         print(Fore.CYAN + "\tstop [dfs|yarn|ozone|namenodes|datanodes]" + Fore.RESET + "\t\t - stop all or some services")
-        print(Fore.CYAN + "\tshutdown" + Fore.RESET + "\t - stop all running services\n")
-        print(Fore.CYAN + "\tuseradd <user> <password>" + Fore.RESET + "\t - create a new user on all nodes\n")
-        print(Fore.CYAN + "\tuserdel <user>" + Fore.RESET + "\t - Delete the user on all nodes\n")
+        print(Fore.CYAN + "\tshutdown" + Fore.RESET + "\t - stop all running services.\n")
+        print(Fore.CYAN + "\tuseradd <user> <password>" + Fore.RESET + "\t - create a new user on all nodes.\n")
+        print(Fore.CYAN + "\tuserdel <user>" + Fore.RESET + "\t - Delete the user on all nodes.\n")
+        print(Fore.CYAN + "\tdump_config" + Fore.RESET + "\t - Print configuration summary (for debugging).\n")
         print("To install the cluster, please edit the file " + Fore.CYAN +
               cluster.get_config_file() + Fore.RESET + " and set appropriate values.")
 

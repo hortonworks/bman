@@ -65,8 +65,8 @@ def install_cluster(cluster_id=uuid.uuid4(), cluster=None, stop_services=True):
     __make_install_dir(cluster=cluster)
     __make_hadoop_log_dirs(cluster=cluster)
     do_kerberos_install(cluster)
-    __deploy_common_config_files(cluster)
     do_hadoop_install(cluster=cluster, cluster_id=cluster_id)
+    __deploy_common_config_files(cluster)
     do_tez_install(cluster)
 
     if stop_services:
@@ -159,7 +159,7 @@ def __deploy_common_config_files(cluster):
     __generate_logging_properties(cluster)
     if not execute(__distribute_common_config_files,
                    hosts=cluster.get_all_hosts(), cluster=cluster,
-                   source_dir=cluster.get_generated_hadoop_conf_tmp_dir,
+                   source_dir=cluster.get_generated_hadoop_conf_tmp_dir(),
                    files=['hadoop-env.sh', 'workers', 'log4j.properties']):
         get_logger().error('copying config files failed.')
         return False
@@ -262,7 +262,6 @@ def __copy_config_files_to_tmp_dir(cluster):
 
 
 @task
-@parallel
 def __distribute_common_config_files(cluster, source_dir, files):
     """
     Copy workers, hadoop-env.sh and log4j.properties to a given cluster node.
@@ -275,9 +274,9 @@ def __distribute_common_config_files(cluster, source_dir, files):
     :param files: a list of config files to copy to the cluster node.
     """
     for f in files:
-        put(os.path.join(source_dir, f),
-            os.path.join(cluster.get_hadoop_conf_dir(), f),
-            use_sudo=True)
+        src = os.path.join(source_dir, f)
+        get_logger().info("Copying {} to {}:{}".format(src, env.host, cluster.get_hadoop_conf_dir()))
+        put(src, os.path.join(cluster.get_hadoop_conf_dir(), f), use_sudo=True)
 
 
 if __name__ == '__main__':
