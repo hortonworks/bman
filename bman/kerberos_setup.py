@@ -101,7 +101,7 @@ def make_headless_principal(cluster=None, kadmin_util=None, user=None):
     keytab_dir = os.path.dirname(cluster.get_site_setting('dfs.namenode.keytab.file'))
     keytab_file = os.path.join(keytab_dir, '{}.headless.keytab'.format(user.name))
 
-    one_nn = cluster.get_hdfs_master_config().get_nn_hosts()[0:1]
+    one_nn = cluster.get_hdfs_configs().get_nn_hosts()[0:1]
 
     # The headless principal can be created on any host. Just use any one NameNode.
     execute(make_principal, hosts=one_nn,

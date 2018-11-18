@@ -60,12 +60,12 @@ def install_cluster(cluster_id=uuid.uuid4(), cluster=None, stop_services=True):
 
     with hide('status', 'warnings', 'running', 'stdout', 'stderr',
               'user', 'commands'):
-        setup_passwordless_ssh(cluster, cluster.get_all_hosts())
+        __setup_passwordless_ssh(cluster, cluster.get_all_hosts())
 
-    make_install_dir(cluster=cluster)
-    make_hadoop_log_dirs(cluster=cluster)
+    __make_install_dir(cluster=cluster)
+    __make_hadoop_log_dirs(cluster=cluster)
     do_kerberos_install(cluster)
-    deploy_common_config_files(cluster)
+    __deploy_common_config_files(cluster)
     do_hadoop_install(cluster=cluster, cluster_id=cluster_id)
     do_tez_install(cluster)
 
@@ -77,28 +77,28 @@ def install_cluster(cluster_id=uuid.uuid4(), cluster=None, stop_services=True):
     return True
 
 
-def make_install_dir(cluster):
+def __make_install_dir(cluster):
     """ Make the top-level install directory on all cluster nodes. """
     with hide('status', 'warnings', 'running', 'stdout', 'stderr', 'user', 'commands'):
-        if not execute(make_base_install_dir, hosts=cluster.get_all_hosts(), cluster=cluster):
+        if not execute(__make_base_install_dir, hosts=cluster.get_all_hosts(), cluster=cluster):
             get_logger().error('Making install directory failed.')
             return False
 
 
-def make_hadoop_log_dirs(cluster):
+def __make_hadoop_log_dirs(cluster):
     """
     Make log output directories for all Hadoop services.
     :param cluster:
     :return:
     """
     targets = cluster.get_all_hosts()
-    if not execute(task_make_hadoop_log_dirs, hosts=targets, cluster=cluster):
+    if not execute(__task_make_hadoop_log_dirs, hosts=targets, cluster=cluster):
         get_logger().error('Failed to create log directories')
         return False
 
 
 @task
-def make_base_install_dir(cluster):
+def __make_base_install_dir(cluster):
     """
     Creates a new install directory after backing up the old one.
     All service binaries and config files will be placed under this
@@ -117,7 +117,7 @@ def make_base_install_dir(cluster):
     return True
 
 
-def setup_passwordless_ssh(cluster, targets):
+def __setup_passwordless_ssh(cluster, targets):
     """ Setup password-less ssh for all service users """
     get_logger().info("Installing ssh keys for users [{}] on {} hosts.".format(
         ", ".join(cluster.get_service_user_names()), len(targets)))
@@ -131,7 +131,7 @@ def setup_passwordless_ssh(cluster, targets):
 
 
 @task
-def task_make_hadoop_log_dirs(cluster):
+def __task_make_hadoop_log_dirs(cluster):
     logging_root = os.path.join(cluster.get_hadoop_install_dir(), constants.HADOOP_LOG_DIR_NAME)
     get_logger().debug("Creating log output dir {} on host {}".format(logging_root, env.host))
     sudo('mkdir -p {}'.format(logging_root))
@@ -139,7 +139,7 @@ def task_make_hadoop_log_dirs(cluster):
     sudo('chmod 775 {}'.format(logging_root))
 
 
-def deploy_common_config_files(cluster):
+def __deploy_common_config_files(cluster):
     """
     Deploy files that are used by multiple services.
      - hadoop-env.sh
@@ -153,20 +153,20 @@ def deploy_common_config_files(cluster):
     :param cluster:
     :return:
     """
-    create_tmp_dirs_for_common_config_files(cluster)
-    generate_workers_file(cluster)
-    generate_hadoop_env(cluster)
-    generate_logging_properties(cluster)
-    if not execute(distribute_common_config_files,
+    __create_tmp_dirs_for_common_config_files(cluster)
+    __generate_workers_file(cluster)
+    __generate_hadoop_env(cluster)
+    __generate_logging_properties(cluster)
+    if not execute(__distribute_common_config_files,
                    hosts=cluster.get_all_hosts(), cluster=cluster,
                    source_dir=cluster.get_generated_hadoop_conf_tmp_dir,
                    files=['hadoop-env.sh', 'workers', 'log4j.properties']):
         get_logger().error('copying config files failed.')
         return False
-    copy_config_files_to_tmp_dir(cluster)
+    __copy_config_files_to_tmp_dir(cluster)
 
 
-def create_tmp_dirs_for_common_config_files(cluster):
+def __create_tmp_dirs_for_common_config_files(cluster):
     """
     Create local directories to store generated config files
     and ssh keys.
@@ -182,7 +182,7 @@ def create_tmp_dirs_for_common_config_files(cluster):
         os.makedirs(d)
 
 
-def generate_workers_file(cluster):
+def __generate_workers_file(cluster):
     """Generates the workers file based on the machines in datanodes list."""
     workers = cluster.get_config(constants.KEY_WORKERS)
     conf_generated_dir = cluster.get_generated_hadoop_conf_tmp_dir()
@@ -197,7 +197,7 @@ def generate_workers_file(cluster):
                  os.path.join(conf_generated_dir, 'slaves'))
 
 
-def generate_hadoop_env(cluster):
+def __generate_hadoop_env(cluster):
     """ Generate hadoop-env.sh."""
     get_logger().debug("Generating hadoop-env.sh from template")
     template_str = resource_string('bman.resources.conf', 'hadoop-env.sh.template').decode('utf-8')
@@ -226,7 +226,7 @@ def generate_hadoop_env(cluster):
         hadoop_env.write(env_str)
 
 
-def generate_logging_properties(cluster):
+def __generate_logging_properties(cluster):
     """
     Genrate right logging template based on options that are enabled.
 
@@ -248,7 +248,7 @@ def generate_logging_properties(cluster):
             logging_prop.write(template_str)
 
 
-def copy_config_files_to_tmp_dir(cluster):
+def __copy_config_files_to_tmp_dir(cluster):
     """ Copy the remaining files as-is, removing the .template suffix """
     conf_generated_dir = cluster.get_generated_hadoop_conf_tmp_dir()
     get_logger().debug("Listing conf resources")
@@ -263,7 +263,7 @@ def copy_config_files_to_tmp_dir(cluster):
 
 @task
 @parallel
-def distribute_common_config_files(cluster, source_dir, files):
+def __distribute_common_config_files(cluster, source_dir, files):
     """
     Copy workers, hadoop-env.sh and log4j.properties to a given cluster node.
 

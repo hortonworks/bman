@@ -193,7 +193,7 @@ def run_dfs_command(cluster=None, cmd=None):
 
     # Run the command on a NameNode host and as the 'hdfs' user.
     get_logger().debug("Running command '{}'".format(cmd))
-    execute(run_cmd, hosts=cluster.get_hdfs_master_config().get_nn_hosts()[0:1],
+    execute(run_cmd, hosts=cluster.get_hdfs_configs().get_nn_hosts()[0:1],
             cmd_string=cmd, user=constants.HDFS_USER)
 
 

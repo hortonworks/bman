@@ -69,20 +69,20 @@ def prepare_cluster(cluster=None, force=False):
 
 
 def do_active_transitions(cluster):
-    for ns in cluster.get_hdfs_master_config().get_nameservices():
+    for ns in cluster.get_hdfs_configs().get_nameservices():
         if len(ns.get_nn_configs()) > 1:
             active_nn_id = ns.choose_active_nn()[0].nn_id
             get_logger().info("Transitioning {}.{} to active".format(ns.nsid, active_nn_id))
             cmd = '{}/bin/hdfs haadmin -ns {} -transitionToActive {}'.format(
                 cluster.get_hadoop_install_dir(), ns.nsid, active_nn_id)
-            targets = cluster.get_hdfs_master_config().get_nn_hosts()[0:1]
+            targets = cluster.get_hdfs_configs().get_nn_hosts()[0:1]
             execute(run_dfs_command, hosts=targets, cluster=cluster, cmd=cmd)
     pass
 
 
 @task
 def run_hdfs(cluster):
-    targets = cluster.get_hdfs_master_config().get_nn_hosts()
+    targets = cluster.get_hdfs_configs().get_nn_hosts()
     execute(start_dfs, hosts=[targets[0]], cluster=cluster)
 
     do_active_transitions(cluster)
@@ -118,12 +118,12 @@ def run_hdfs(cluster):
 
 @task
 def run_yarn(cluster):
-    targets = cluster.get_hdfs_master_config().get_nn_hosts()
+    targets = cluster.get_hdfs_configs().get_nn_hosts()
     execute(start_yarn, hosts=[targets[0]], cluster=cluster)
 
 
 def start_stop_namenodes(action=None, nodes=None, cluster=None):
-    targets = nodes if nodes else cluster.get_hdfs_master_config().get_nn_hosts()
+    targets = nodes if nodes else cluster.get_hdfs_configs().get_nn_hosts()
     execute(start_stop_service, hosts=targets, cluster=cluster,
             action=action, service_name='namenode', user=constants.HDFS_USER)
     return True
@@ -137,7 +137,7 @@ def start_stop_datanodes(action=None, nodes=None, cluster=None):
 
 
 def start_stop_journalnodes(action=None, nodes=None, cluster=None):
-    targets = nodes if nodes else cluster.get_hdfs_master_config().get_jn_hosts()
+    targets = nodes if nodes else cluster.get_hdfs_configs().get_jn_hosts()
     execute(start_stop_service, hosts=targets, cluster=cluster,
             action=action, service_name='journalnode', user=constants.HDFS_USER)
     return True
@@ -145,13 +145,13 @@ def start_stop_journalnodes(action=None, nodes=None, cluster=None):
 
 def run_ozone():
     cluster = config.load_config()
-    targets = cluster.get_hdfs_master_config().get_nn_hosts()
+    targets = cluster.get_hdfs_configs().get_nn_hosts()
     execute(start_ozone, hosts=targets[0], cluster=cluster)
     return True
 
 
 def shutdown(cluster):
-    targets = cluster.get_hdfs_master_config().get_nn_hosts()
+    targets = cluster.get_hdfs_configs().get_nn_hosts()
 
     if cluster.is_yarn_enabled():
         execute(stop_yarn, hosts=targets[0], cluster=cluster)
@@ -247,7 +247,7 @@ def wipe_cluster(cluster, force=False):
                   the storage directories. Default: hdfs
     """
     try:
-        master_config = cluster.get_hdfs_master_config()
+        master_config = cluster.get_hdfs_configs()
         if not force:
             force = prompt_for_yes_no(
                 "Data will be irrecoverably lost from node {}. "

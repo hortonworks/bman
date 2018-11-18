@@ -33,7 +33,7 @@ commands_list = ['config', 'help', 'quit', 'namenodes', 'datanodes',
                  'journalnodes', 'cluster', 'tarball', 'prepare',
                  'deploy', 'hdfs', 'cblock', 'start', 'stop',
                  'mapred', 'yarn', 'nodemanager', 'resourcemanager',
-                 'useradd']
+                 'useradd', 'dump_config']
 command_completer = WordCompleter(commands_list, ignore_case=True)
 
 

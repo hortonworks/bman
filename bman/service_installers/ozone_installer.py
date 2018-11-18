@@ -21,23 +21,21 @@ from fabric.operations import sudo
 from pkg_resources import resource_string
 
 import bman.constants as constants
-from bman.local_tasks import generate_custom_settings
+from bman.local_tasks import generate_custom_settings, generate_site_config
 from bman.logger import get_logger
 
 
 def deploy_ozone(cluster):
-    if cluster.get_config(constants.KEY_OZONE_ENABLED):
-        generate_ozone_site(cluster)
-
-
-def make_ozone_directories(cluster, targets):
-    # TODO: Make Ozone directories here on all nodes.
     if cluster.is_ozone_enabled():
-        sudo('install -d -m 0755 {}'.format(cluster.get_config(constants.KEY_OZONE_METADIR)))
-        sudo('chown -R hdfs:hadoop {}'.format(cluster.get_config(constants.KEY_OZONE_METADIR)))
+        generate_ozone_site(cluster)
+        make_ozone_directories(cluster)
 
+
+def make_ozone_directories(cluster):
+    # TODO: Make Ozone directories here on all nodes.
+    targets = cluster.get_all_hosts()
     if not execute(create_ozone_metadata_paths, hosts=targets, cluster=cluster):
-        get_logger().error('Create directories failed.')
+        get_logger().error('Failed to create Ozone directories.')
         return False
 
 
@@ -57,23 +55,9 @@ def create_ozone_metadata_paths(cluster):
 
 
 def generate_ozone_site(cluster):
-    template_str = resource_string('bman.resources.conf', 'ozone-site.xml.template').decode('utf-8')
-    site_string = string.Template(template_str)
-    ozone_str = site_string.substitute(
-        OzoneEnabled=cluster.get_config(constants.KEY_OZONE_ENABLED),
-        OzoneMetadataDir=cluster.get_config(constants.KEY_OZONE_METADIR),
-        ScmServerAddress=cluster.get_config(constants.KEY_SCMADDRESS),
-        OzoneDatanodeID=cluster.get_config(constants.KEY_SCM_DATANODE_ID),
-        cBlockServerAddress=cluster.get_config(constants.KEY_CBLOCK_ADDRESS),
-        cBlockCacheEnabled=cluster.get_config(constants.KEY_CBLOCK_CACHE),
-        cBlockTraceEnabled=cluster.get_config(constants.KEY_CBLOCK_TRACE),
-        CBlockCachePath=cluster.get_config(constants.KEY_CBLOCK_CACHE_PATH),
-        OzoneCustomConfig=generate_custom_settings(
-            cluster.get_config(constants.KEY_OZONE_SITE_SETTINGS)))
-
-    with open(os.path.join(
-            cluster.get_generated_hadoop_conf_tmp_dir(), "ozone-site.xml"), "w") as ozone_site:
-        ozone_site.write(ozone_str)
+    generate_site_config(cluster, filename='ozone-site.xml',
+                         settings_key=constants.KEY_OZONE_SITE_SETTINGS,
+                         output_dir=cluster.get_generated_hadoop_conf_tmp_dir())
 
 
 if __name__ == '__main__':

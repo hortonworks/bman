@@ -19,15 +19,17 @@ from bman.exceptions import ConfigurationError
 from bman.logger import get_logger
 
 
-class HdfsMasterConfigs:
+class HdfsConfigs:
     """
-    This class is used to parse and store NameNode configuration for all of the
+    This class is used to parse and store HDFS configuration for all of the
     following situations:
         - Non-HA config
         - HA config
         - Federation config
 
     and valid combinations of the above.
+
+    It also parses the other settings in hdfs-site.xml.
     """
 
     def __init__(self, config_values):
@@ -120,6 +122,9 @@ class HdfsMasterConfigs:
     def get_nameservices(self):
         return self.nameservices
 
+    def __str__(self):
+        return str([str(n) for n in self.nameservices])
+
 
 class NameNodeInfo:
     """
@@ -131,8 +136,9 @@ class NameNodeInfo:
         """
         Parse configuration for one NameNode from hdfs-site.xml settings.
         """
+        self.is_pseudo = not bool(nn_id)
         self.ns_id = ns_id
-        self.nn_id = nn_id
+        self.nn_id = nn_id if nn_id else 'pseudo'
         self.hostname = hostname
         self.dirs = []
         self.dirs = self.parse_nn_dirs(values)
@@ -140,7 +146,7 @@ class NameNodeInfo:
     def __lt__(self, other):
         return self.hostname < other.hostname
 
-    def __repr__(self):
+    def __str__(self):
         return self.hostname
 
     def parse_nn_dirs(self, values):
@@ -163,12 +169,24 @@ class NameNodeInfo:
     def get_hostname(self):
         return self.hostname
 
+    def write_configuration(self, writer):
+        """
+        Write configuration using the given method.
+        :param writer: A method which is invoked with config as strings.
+        :return:
+        """
+        if not self.is_pseudo:
+            writer("NamenodeID           : {}".format(self.nn_id))
+        writer("NameNode host        : {}".format(self.hostname))
+        writer("NameNode dirs        : {}".format(self.dirs))
+
 
 class NameService(object):
     """
     A class that encapsulates master node information for a single HDFS nameservice.
     """
     def __init__(self, values, nsid=None):
+        self.is_pseudo = not bool(nsid)
         self.nsid = nsid if nsid else 'pseudo'  # Our nameserviceId
         self.nn_configs = []
         self.jn_hosts = []
@@ -182,10 +200,18 @@ class NameService(object):
             # This is a pseudo nameservice.
             self.init_pseudo_nameservice(values)
 
-    def __repr__(self):
-        return "{} - NNs={}; JNs={}; SNNs={}".format(
-            self.nsid if self.nsid else 'pseudo', self.nn_configs,
-            self.jn_hosts, self.snn_hosts)
+    def __str__(self):
+        components = []
+        if not self.is_pseudo:
+            components.append("nsId: {}".format(self.nsid))
+        components.append("NameNodeConfigs: {}".format(
+            [str(nn_config) for nn_config in self.nn_configs]))
+        if self.snn_hosts:
+            components.append("SecondaryNameNodeHosts: {}".format(self.snn_hosts))
+        if self.jn_hosts:
+            components.append("JournalNodeHosts: {}".format(self.jn_hosts))
+            components.append("JournalStorageDirectories: {}".format(self.jn_edits_dirs))
+        return ", ".join(components)
 
     def parse(self, values):
         """
@@ -232,7 +258,7 @@ class NameService(object):
         fs_url = url_parser.urlparse(values['fs.defaultFS'])
         if fs_url.scheme and fs_url.scheme in {'hdfs', 'viewfs'}:
             self.nn_configs.append(NameNodeInfo(
-                'pseudo', self.nsid, fs_url.netloc.split(":")[0], values))
+                self.nsid, None, fs_url.netloc.split(":")[0], values))
         else:
             raise ConfigurationError(
                 "Bad fs.defaultFS '{}'. The scheme must be specified as " +
@@ -268,7 +294,7 @@ class NameService(object):
             rpc_address_key = 'dfs.namenode.rpc-address.{}'.format(self.nsid)
             if rpc_address_key in values:
                 hostname = values[rpc_address_key].split(':')[0]
-                self.nn_configs.append(NameNodeInfo(self.nsid, 'pseudo', hostname, values))
+                self.nn_configs.append(NameNodeInfo(self.nsid, None, hostname, values))
                 return
             else:
                 raise ConfigurationError('Unable to find NameNode host for nameservice {}'.format(

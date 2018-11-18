@@ -15,6 +15,8 @@
 from __future__ import print_function
 from __future__ import print_function
 
+import sys
+
 import fabric
 from colorama import Fore
 from fabric.api import env, local, hide
@@ -46,7 +48,8 @@ class BmanCommandHandler:
             'start': self.handle_start,
             'stop': self.handle_stop,
             'shutdown': self.handle_shutdown,
-            'useradd': self.handle_useradd
+            'useradd': self.handle_useradd,
+            'dump_config': self.handle_dump_config
         }
         self.init_fabric_env_auth_settings(cluster)
 
@@ -80,7 +83,7 @@ class BmanCommandHandler:
 
     @staticmethod
     def handle_namenode(command, cluster):
-        print("NameNodes: {}".format(cluster.get_hdfs_master_config().get_nn_hosts()))
+        print("NameNodes: {}".format(cluster.get_hdfs_configs().get_nn_hosts()))
 
     @staticmethod
     def handle_datanode(command, cluster):
@@ -88,7 +91,7 @@ class BmanCommandHandler:
 
     @staticmethod
     def handle_journalnode(command, cluster):
-        print("JournalNodes : {}".format(cluster.get_hdfs_master_config().get_jn_hosts()))
+        print("JournalNodes : {}".format(cluster.get_hdfs_configs().get_jn_hosts()))
 
     @staticmethod
     def handle_prepare_cluster(command, cluster):
@@ -172,6 +175,10 @@ class BmanCommandHandler:
             print("    The group will be created if it doesn't exist.")
             return
         add_user(cluster, config.UserConfig(*command.split()[1:]))
+
+    @staticmethod
+    def handle_dump_config(command, cluster):
+        print("Configuration Summary: {}".format(cluster))
 
     def handle_command(self, command, cluster):
         if not command:
