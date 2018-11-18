@@ -29,7 +29,7 @@ def read_config_value_with_default(config_map, values, key, default_value=None):
     :param default_value:
     :return:
     """
-    if key in values:
+    if key in values and values[key]:
         config_map[key] = values[key]
     else:
         config_map[key] = default_value
@@ -46,9 +46,9 @@ def read_config_value_with_altkey(config_map, values, key, altkey):
     :return:
     """
     value = None
-    if key in values:
+    if key in values and values[key]:
         config_map[key] = value = values[key]
-    if not value and altkey in values:
+    if not value and altkey in values and values[altkey]:
         get_logger().warn("{} has been deprecated by {}".format(
             altkey, key))
         config_map[key] = values[altkey]
