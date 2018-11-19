@@ -14,10 +14,14 @@
 
 import glob
 import os
+import re
+import shutil
+from string import Template
 
 from fabric.api import hide, execute, sudo, put
 from fabric.decorators import task, parallel
 from fabric.state import env
+from pkg_resources import resource_string, resource_listdir
 
 import bman.constants as constants
 from bman.local_tasks import generate_site_config
@@ -37,8 +41,9 @@ def do_hadoop_install(cluster, cluster_id=None):
         return
 
     __deploy_hadoop_tarball(cluster=cluster)
-    __generate_hadoop_configs(cluster=cluster)
     __make_hdfs_storage_directories(cluster)
+    __generate_hadoop_configs(cluster=cluster)
+    __deploy_common_config_files(cluster)
     __format_hdfs_nameservices(cluster, cluster_id)
 
     if not execute(start_stop_service, hosts=cluster.get_worker_nodes(), cluster=cluster,
@@ -59,20 +64,22 @@ def __make_hdfs_storage_directories(cluster):
     get_logger().info("Creating HDFS metadata and data directories")
     master_config = cluster.get_hdfs_configs()
     service_dir_map = {
-        tuple(cluster.get_worker_nodes()): cluster.get_datanode_dirs(),
-        tuple(master_config.get_nn_hosts()): master_config.get_nn_dirs(),
-        tuple(master_config.get_snn_hosts()): master_config.get_snn_dirs(),
-        tuple(master_config.get_jn_hosts()): master_config.get_jn_dirs()
+        "DN": [cluster.get_worker_nodes(), cluster.get_datanode_dirs()],
+        "NN": [master_config.get_nn_hosts(), master_config.get_nn_dirs()],
+        "SNN": [master_config.get_snn_hosts(), master_config.get_snn_dirs()],
+        "JN": [master_config.get_jn_hosts(), master_config.get_jn_dirs()]
     }
 
     with hide('status', 'warnings', 'running', 'stdout', 'stderr',
               'user', 'commands'):
-        for nodes, dirs in service_dir_map.items():
-            if nodes and dirs:
+        for service, nodes_and_dirs in service_dir_map.items():
+            if nodes_and_dirs[0] and nodes_and_dirs[1]:
                 get_logger().info("Creating {} directories on {} hosts".format(
-                    dirs, len(nodes)))
-                if not execute(make_hdfs_storage_dirs, hosts=list(nodes), dirs=dirs):
-                    get_logger().error("Failed to make directories {}".format(dirs))
+                    service, len(nodes_and_dirs[0])))
+                if not execute(make_hdfs_storage_dirs,
+                    hosts=list(nodes_and_dirs[0]), dirs=nodes_and_dirs[1]):
+                    get_logger().error("Failed to make {} directories {}".format(
+                        service, nodes_and_dirs[1]))
                     return False
 
 
@@ -106,22 +113,26 @@ def __deploy_hadoop_tarball(cluster):
 def __generate_hadoop_configs(cluster):
     output_dir = cluster.get_generated_hadoop_conf_tmp_dir()
     if cluster.is_hadoop_enabled():
+        get_logger().info('Generating core-site.xml to {}.'.format(output_dir))
         generate_site_config(cluster, filename='core-site.xml',
                              settings_key=constants.KEY_CORE_SITE_SETTINGS,
                              output_dir=output_dir)
 
     if cluster.is_hdfs_enabled():
+        get_logger().info('Generating hdfs-site.xml to {}.'.format(output_dir))
         __update_hdfs_configs(cluster)
         generate_site_config(cluster, filename='hdfs-site.xml',
                              settings_key=constants.KEY_HDFS_SITE_SETTINGS,
                              output_dir=output_dir)
 
     if cluster.is_yarn_enabled():
+        get_logger().info('Generating yarn-site.xml to {}.'.format(output_dir))
         __update_yarn_configs(cluster)
         __update_mapred_configs(cluster)
         generate_site_config(cluster, filename='yarn-site.xml',
                              settings_key=constants.KEY_YARN_SITE_SETTINGS,
                              output_dir=cluster.get_generated_hadoop_conf_tmp_dir())
+        get_logger().info('Generating mapred-site.xml to {}.'.format(output_dir))
         generate_site_config(cluster, filename='mapred-site.xml',
                              settings_key=constants.KEY_MAPRED_SITE_SETTINGS,
                              output_dir=output_dir)
@@ -333,6 +344,146 @@ def __update_hdfs_configs(cluster):
     # Make sure the value of dfs.replication is set sanely for the cluster.
     if 'dfs.replication' not in settings_dict:
         settings_dict['dfs.replication'] = max(3, len(cluster.get_worker_nodes()))
+
+
+def __deploy_common_config_files(cluster):
+    """
+    Deploy files that are used by multiple services.
+     - hadoop-env.sh
+     - workers
+     - log4j.properties
+     - ssh keys.
+
+    Hadoop is somewhat specially.
+
+    These files must be present on every bman deployed cluster.
+    :param cluster:
+    :return:
+    """
+    __create_tmp_dirs_for_common_config_files(cluster)
+    __generate_workers_file(cluster)
+    __generate_hadoop_env(cluster)
+    __generate_logging_properties(cluster)
+    if not execute(__distribute_common_config_files,
+                   hosts=cluster.get_all_hosts(), cluster=cluster,
+                   source_dir=cluster.get_generated_hadoop_conf_tmp_dir(),
+                   files=['hadoop-env.sh', 'workers', 'log4j.properties']):
+        get_logger().error('copying config files failed.')
+        return False
+    __copy_config_files_to_tmp_dir(cluster)
+
+
+def __create_tmp_dirs_for_common_config_files(cluster):
+    """
+    Create local directories to store generated config files
+    and ssh keys.
+
+    These will eventually be copied to the cluster nodes.
+    :param cluster:
+    :return:
+    """
+    for d in [cluster.get_generated_hadoop_conf_tmp_dir(),
+              cluster.get_ssh_keys_tmp_dir()]:
+        if os.path.exists(d):
+            shutil.rmtree(d)
+        os.makedirs(d)
+
+
+def __generate_workers_file(cluster):
+    """Generates the workers file based on the machines in datanodes list."""
+    workers = cluster.get_config(constants.KEY_WORKERS)
+    conf_generated_dir = cluster.get_generated_hadoop_conf_tmp_dir()
+    with open(os.path.join(conf_generated_dir, 'workers'), 'w') as workers_file:
+        for host_name in workers:
+            workers_file.write(host_name)
+            workers_file.write('\n')
+
+    # Also make a copy named 'slaves' for Hadoop versions 2.x.
+    # TODO: Deprecate this eventually.
+    shutil.copy2(os.path.join(conf_generated_dir, 'workers'),
+                 os.path.join(conf_generated_dir, 'slaves'))
+
+
+def __generate_hadoop_env(cluster):
+    """ Generate hadoop-env.sh."""
+    get_logger().debug("Generating hadoop-env.sh from template")
+    template_str = resource_string('bman.resources.conf', 'hadoop-env.sh.template').decode('utf-8')
+    env_str = Template(template_str)
+
+    log_dirs = {}
+    # Set the log directories for Hadoop service users.
+    for user in cluster.get_service_users():
+        log_dirs['{}_log_dir_config'.format(user.name)] = os.path.join(
+            cluster.get_hadoop_install_dir(), "logs", user.name)
+
+    env_str = env_str.safe_substitute(
+        hadoop_home_config=cluster.get_hadoop_install_dir(),
+        java_home=cluster.get_config(constants.KEY_JAVA_HOME),
+        hdfs_datanode_secure_user=(constants.HDFS_USER if cluster.is_kerberized() else ''),
+        hdfs_datanode_user=('root' if cluster.is_kerberized() else constants.HDFS_USER),
+        hdfs_user=constants.HDFS_USER,
+        yarn_user=constants.YARN_USER,
+        jsvc_home=constants.JSVC_HOME,
+        **log_dirs)
+
+    if cluster.is_tez_enabled():
+        env_str = env_str + get_hadoop_env_tez_settings(cluster)
+
+    with open(os.path.join(cluster.get_generated_hadoop_conf_tmp_dir(), "hadoop-env.sh"), "w") as hadoop_env:
+        hadoop_env.write(env_str)
+
+
+def __generate_logging_properties(cluster):
+    """
+    Genrate right logging template based on options that are enabled.
+
+    That is if ozone is enabled, then ozone logging is added if cBlock trace is
+    enabled then cBlock trace setting is added.
+    :param cluster:
+    :return:
+    """
+    logging_templates = ["log4j.properties.template"]
+
+    if cluster.get_config(constants.KEY_OZONE_ENABLED):
+        logging_templates.append(os.path.join("ozone.logging.template"))
+        if cluster.get_config(constants.KEY_CBLOCK_TRACE):
+            logging_templates.append(os.path.join("cblock.tracing.template"))
+
+    with open(os.path.join(cluster.get_generated_hadoop_conf_tmp_dir(), "log4j.properties"), "w") as logging_prop:
+        for log_template in logging_templates:
+            template_str = resource_string('bman.resources.conf', log_template).decode('utf-8')
+            logging_prop.write(template_str)
+
+
+def __copy_config_files_to_tmp_dir(cluster):
+    """ Copy the remaining files as-is, removing the .template suffix """
+    conf_generated_dir = cluster.get_generated_hadoop_conf_tmp_dir()
+    get_logger().debug("Listing conf resources")
+    for f in resource_listdir('bman.resources.conf', ''):
+        if f.endswith('.template'):
+            get_logger().debug("Got resource {}".format(f))
+            resource_contents = resource_string('bman.resources.conf', f).decode('utf-8')
+            filename = re.sub(".template$", "", f)
+            with open(os.path.join(conf_generated_dir, filename), "w") as output_file:
+                output_file.write(resource_contents)
+
+
+@task
+def __distribute_common_config_files(cluster, source_dir, files):
+    """
+    Copy workers, hadoop-env.sh and log4j.properties to a given cluster node.
+
+    This is a case where Hadoop is slightly special since hadoop-env.sh
+    is used by Ozone also, even if we are not installing HDFS+YARN.
+
+    :param cluster:
+    :param source_dir: local directory that has the generated config files.
+    :param files: a list of config files to copy to the cluster node.
+    """
+    for f in files:
+        src = os.path.join(source_dir, f)
+        get_logger().info("Copying {} to {}:{}".format(src, env.host, cluster.get_hadoop_conf_dir()))
+        put(src, os.path.join(cluster.get_hadoop_conf_dir(), f), use_sudo=True)
 
 
 if __name__ == '__main__':

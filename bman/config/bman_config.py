@@ -21,9 +21,9 @@ import sys
 import yaml
 
 from bman.config.config_utils import *
-from bman.constants import *
 from bman.config.hdfs_configs import HdfsConfigs
 from bman.config.kerberos_config_manager import KerberosConfigGenerator
+from bman.constants import *
 from bman.kerberos_setup import KEY_KADMIN_SERVER, KEY_KADMIN_PRINCIPAL, KEY_KADMIN_PASSWORD
 from bman.logger import get_logger
 

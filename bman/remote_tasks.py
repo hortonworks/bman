@@ -355,6 +355,8 @@ def add_user(cluster=None, new_user=None):
     Creates an unprivileged user e.g. to run HDFS commands and submit jobs.
     """
     targets = cluster.get_all_hosts()
+    get_logger().info("Adding user '{}' on {} hosts".format(
+        new_user.name, len(targets)))
     with hide('status', 'warnings', 'running', 'stdout', 'stderr', 'user', 'commands'):
         if not execute(add_user_task, hosts=targets, new_user=new_user):
             get_logger().error('Failed to create user {}.'.format(new_user.name))
