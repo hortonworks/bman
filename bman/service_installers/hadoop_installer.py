@@ -482,7 +482,7 @@ def __distribute_common_config_files(cluster, source_dir, files):
     """
     for f in files:
         src = os.path.join(source_dir, f)
-        get_logger().info("Copying {} to {}:{}".format(src, env.host, cluster.get_hadoop_conf_dir()))
+        get_logger().debug("Copying {} to {}:{}".format(src, env.host, cluster.get_hadoop_conf_dir()))
         put(src, os.path.join(cluster.get_hadoop_conf_dir(), f), use_sudo=True)
 
 
