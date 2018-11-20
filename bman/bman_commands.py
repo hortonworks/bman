@@ -39,6 +39,7 @@ class BmanCommandHandler:
             'namenodes': self.handle_namenode,
             'datanodes': self.handle_datanode,
             'journalnodes': self.handle_journalnode,
+            'wipe': self.handle_wipe_cluster,
             'prepare': self.handle_prepare_cluster,
             'install': self.handle_install,
             'deploy': self.handle_deploy,
@@ -59,7 +60,7 @@ class BmanCommandHandler:
         print(Fore.CYAN + "\tconfig" + Fore.RESET + "\t\t - print the current cluster configration.")
         print(Fore.CYAN + "\tnamenodes" + Fore.RESET + "\t - print the list of namenodes.")
         print(Fore.CYAN + "\tdatanodes" + Fore.RESET + "\t - print the list of datanodes.")
-        print(Fore.CYAN + "\tprepare" + Fore.RESET + "\t\t - prepare the cluster for a new installation")
+        print(Fore.CYAN + "\twipe" + Fore.RESET + "\t\t - wipe all nodes in the cluster")
         print(Fore.CYAN + "\tinstall" + Fore.RESET + "\t\t - install the cluster and start all services")
         print(Fore.CYAN + "\tstart [dfs|yarn|ozone|namenodes|datanodes]" + Fore.RESET + "\t\t - start all or some services")
         print(Fore.CYAN + "\tstop [dfs|yarn|ozone|namenodes|datanodes]" + Fore.RESET + "\t\t - stop all or some services")
@@ -93,11 +94,16 @@ class BmanCommandHandler:
         print("JournalNodes : {}".format(cluster.get_hdfs_configs().get_jn_hosts()))
 
     @staticmethod
-    def handle_prepare_cluster(command, cluster):
+    def handle_wipe_cluster(command, cluster):
         env.output_prefix = False
         # Convert from string to binary
         prepare_cluster(cluster=cluster, force=is_true(cluster.config[constants.KEY_FORCE_WIPE]))
-        get_logger().info("Done preparing the cluster.")
+        get_logger().info("Done wiping the cluster.")
+
+    @staticmethod
+    def handle_prepare_cluster(command, cluster):
+        get_logger().warn("prepare command is deprecated. Use 'wipe' instead.")
+        BmanCommandHandler.handle_wipe_cluster(command, cluster)
 
     @staticmethod
     def handle_install(command, cluster, stop_services=True):
