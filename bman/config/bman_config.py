@@ -82,6 +82,10 @@ class Cluster(object):
             # The former is used by bman, the latter is read by the Hadoop services
             # and clients.
             # TODO: Consider consolidating them instead.
+            if not self.get_config(KEY_REALM):
+                raise ValueError("Kerberos realm must be defined in {}".format(
+                    self.config_file))
+
             KerberosConfigGenerator().add_missing_confs(
                 self.get_config(KEY_REALM), self.all_site_settings,
                 self.get_config(KEY_HDFS_SITE_SETTINGS),
@@ -323,6 +327,9 @@ class Cluster(object):
 
         components.append("TezEnabled: {}".format(self.is_tez_enabled()))
         components.append("OzoneEnabled: {}".format(self.is_ozone_enabled()))
+
+        if self.is_hdfs_enabled():
+            components.append("HdfsSite: {}".format(self.get_config(KEY_HDFS_SITE_SETTINGS)))
         return ", ".join(components)
 
     def is_tez_enabled(self):

@@ -81,9 +81,11 @@ def do_kerberos_install(cluster=None):
     get_logger().info("Installing jsvc and Linux container executor on all cluster hosts")
     copy_jce_policy_files(cluster)
     execute(install_jsvc, hosts=cluster.get_all_hosts())
-    execute(install_container_executor, hosts=cluster.get_all_hosts(), cluster=cluster)
     make_headless_principals(cluster)
     generate_hdfs_principals_and_keytabs(cluster=cluster)
+
+    # container-executor installation is deferred until later,
+    # after Hadoop is installed.
 
 
 def make_headless_principal(cluster=None, kadmin_util=None, user=None):
@@ -211,7 +213,8 @@ def install_container_executor(cluster=None):
     local_ce_file = resource_filename('bman.resources.bin', 'container-executor')
     remote_path = os.path.join(cluster.get_hadoop_install_dir(), 'bin/container-executor')
     if not exists(path=remote_path):
-        get_logger().debug(" >> Copying container executor from {} to {}".format(local_ce_file, remote_path))
+        get_logger().info(" >> Copying container executor from {} to {}:{}".format(
+            local_ce_file, env.host, remote_path))
         put(local_path=local_ce_file, remote_path=remote_path)
     sudo('chown root.{0} {1} && chmod 6050 {1}'.format(
         HADOOP_GROUP, remote_path))

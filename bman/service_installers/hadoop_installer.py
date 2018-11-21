@@ -24,6 +24,7 @@ from fabric.state import env
 from pkg_resources import resource_string, resource_listdir
 
 import bman.constants as constants
+from bman.kerberos_setup import install_container_executor
 from bman.local_tasks import generate_site_config
 from bman.logger import get_logger
 from bman.remote_tasks import do_active_transitions
@@ -44,6 +45,7 @@ def do_hadoop_install(cluster, cluster_id=None):
     __make_hdfs_storage_directories(cluster)
     __generate_hadoop_configs(cluster=cluster)
     __deploy_common_config_files(cluster)
+    execute(install_container_executor, hosts=cluster.get_all_hosts(), cluster=cluster)
     __format_hdfs_nameservices(cluster, cluster_id)
 
     if not execute(start_stop_service, hosts=cluster.get_worker_nodes(), cluster=cluster,

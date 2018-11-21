@@ -63,7 +63,7 @@ DEFAULT_SECONDARY_NAMENODE_HTTP_PORT = 9869
 DEFAULT_SSH_KEY_NAME = 'id_rsa'  # The default key name that sshd understands
 
 # Deprecated keys. We still parse them for compatibility with older config files.
-KEY_DATANODES = 'Datanodes'     # Deprecated by KEY_WORKERS
+KEY_DATANODES = 'Datanodes'      # Deprecated by KEY_WORKERS
 
 if __name__ == '__main__':
     pass
