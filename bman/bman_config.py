@@ -75,6 +75,8 @@ class Cluster(object):
         return pprint.pformat(self.config, indent=4)
 
     def get_config(self, key):
+        if not key in self.config:
+            return None
         return self.config.get(key)
 
     def has_site_setting(self, key):
@@ -145,7 +147,7 @@ class Cluster(object):
         self.hdfs_master_configs = HdfsMasterConfigs(self.all_site_settings)
         self.init_host_lists()
 
-        self.read_config_value_with_default(values, KEY_OZONE_ENABLED, 'False')
+        self.read_config_value_with_default(values, KEY_OZONE_ENABLED, False)
         # If ozone is enabled then we must know where to place ozone metadata.
         if self.get_config(KEY_OZONE_ENABLED):
             self.read_required_config_value(values, KEY_OZONE_METADIR)
@@ -312,7 +314,7 @@ def load_config(config_file=None):
         get_logger().error("Error: config file {} does not exist\n".format(config_file))
         sys.exit(1)
     with open(config_file, 'r') as stream:
-        cluster = Cluster(yaml.load(stream), config_file)
+        cluster = Cluster(yaml.safe_load(stream), config_file)
     return cluster
 
 
