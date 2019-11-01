@@ -32,7 +32,7 @@ setup(name='bman',
       install_requires=[
           "colorama>=0.3.7",
           "daiquiri>=1.3.0",
-          "ecdsa==0.13",
+          "ecdsa==0.13.3",
           "Fabric3>=1.13.1",
           "paramiko>=1.17.0",
           "pexpect==4.2.1",
